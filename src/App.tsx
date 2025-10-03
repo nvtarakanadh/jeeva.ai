@@ -143,6 +143,16 @@ const App = () => {
                             <MainLayout><DoctorConsents /></MainLayout>
                           </ProtectedRoute>
                         } />
+                        <Route path="/doctor/profile" element={
+                          <ProtectedRoute allowedRoles={['doctor']}>
+                            <MainLayout><Profile /></MainLayout>
+                          </ProtectedRoute>
+                        } />
+                        <Route path="/doctor/settings" element={
+                          <ProtectedRoute allowedRoles={['doctor']}>
+                            <MainLayout><Settings /></MainLayout>
+                          </ProtectedRoute>
+                        } />
                 
                 
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
