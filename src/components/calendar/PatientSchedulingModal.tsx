@@ -74,6 +74,8 @@ const PatientSchedulingModal: React.FC<PatientSchedulingModalProps> = memo(({
   doctors = [],
   testCenters = []
 }) => {
+  console.log('🔍 PatientSchedulingModal received doctors:', doctors);
+  console.log('🔍 Doctors length in modal:', doctors?.length);
   const [formData, setFormData] = useState<PatientScheduleData>({
     title: '',
     appointment_type: 'consultation',
@@ -332,19 +334,28 @@ const PatientSchedulingModal: React.FC<PatientSchedulingModalProps> = memo(({
                   <SelectValue placeholder="Choose a doctor" />
                 </SelectTrigger>
                 <SelectContent>
-                  {doctors.map((doctor) => (
-                    <SelectItem key={doctor.id} value={doctor.id}>
-                      <div className="flex items-center gap-2">
+                  {doctors.length === 0 ? (
+                    <SelectItem value="no-doctors" disabled>
+                      <div className="flex items-center gap-2 text-gray-500">
                         <User className="h-4 w-4" />
-                        <span>{doctor.name}</span>
-                        {doctor.specialization && (
-                          <Badge variant="secondary" className="ml-2">
-                            {doctor.specialization}
-                          </Badge>
-                        )}
+                        <span>No doctors available</span>
                       </div>
                     </SelectItem>
-                  ))}
+                  ) : (
+                    doctors.map((doctor) => (
+                      <SelectItem key={doctor.id} value={doctor.id}>
+                        <div className="flex items-center gap-2">
+                          <User className="h-4 w-4" />
+                          <span>{doctor.name}</span>
+                          {doctor.specialization && (
+                            <Badge variant="secondary" className="ml-2">
+                              {doctor.specialization}
+                            </Badge>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
               {errors.doctor_id && <p className="text-sm text-red-500">{errors.doctor_id}</p>}

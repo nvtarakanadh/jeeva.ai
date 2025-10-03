@@ -710,7 +710,7 @@ const DoctorDashboard = () => {
     { label: 'Total Patients', value: stats.totalPatients.toString(), icon: Users, href: '/doctor/patients' },
     { label: 'Pending Consents', value: stats.pendingConsents.toString(), icon: Clock, href: '/doctor/consents' },
     { label: 'Active Consents', value: stats.activeConsents.toString(), icon: CheckCircle, href: '/doctor/consents' },
-    { label: 'Schedule', value: events.length.toString(), icon: Calendar, href: '#', isButton: true },
+    { label: 'Schedule', value: events.length.toString(), icon: Calendar, href: '#' },
   ], [stats, events]);
 
   // Memoize calendar handlers to prevent unnecessary re-renders
@@ -779,7 +779,7 @@ const DoctorDashboard = () => {
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {quickStats.map((stat, index) => (
-          <Card key={index} className={stat.isButton ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}>
+          <Card key={index} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => stat.href !== '#' && navigate(stat.href)}>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -790,17 +790,6 @@ const DoctorDashboard = () => {
                   <stat.icon className="h-6 w-6 text-primary" />
                 </div>
               </div>
-              {stat.isButton && (
-                <Button 
-                  className="w-full mt-4" 
-                  variant="outline"
-                  onClick={() => setIsScheduleModalOpen(true)}
-                  data-schedule-button
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Schedule
-                </Button>
-              )}
             </CardContent>
           </Card>
         ))}

@@ -12,6 +12,7 @@ import { PageSkeleton } from '@/components/ui/skeleton-loading';
 import { cacheService, createCacheKey, CACHE_TTL } from '@/services/cacheService';
 import { getPatientConsentRequests } from '@/services/consentService';
 import { supabase } from '@/integrations/supabase/client';
+import { getDoctors } from '@/services/doctorsService';
 import QuickActions from '@/components/layout/QuickActions';
 import PatientCalendarComponent, { PatientAppointment } from '@/components/calendar/PatientCalendarComponent';
 import PatientSchedulingModal, { PatientScheduleData } from '@/components/calendar/PatientSchedulingModal';
@@ -86,6 +87,9 @@ const PatientDashboard = () => {
         setHealthAlerts(alertsData as any);
         setAppointments(appointmentsData as any);
         console.log('🔍 Setting doctors in state:', doctorsData);
+        console.log('🔍 Doctors length:', Array.isArray(doctorsData) ? doctorsData.length : 0);
+        
+        // Set doctors data
         setDoctors(doctorsData as any);
         setTestCenters(testCentersData as any);
       } catch (error) {
@@ -214,46 +218,22 @@ const PatientDashboard = () => {
     if (cached) return cached;
     
     try {
-      // Fetch real doctors from Supabase profiles table using direct fetch
-      const response = await fetch(`https://wgcmusjsuziqjkzuaqkd.supabase.co/rest/v1/profiles?role=eq.doctor&select=user_id,full_name,specialization,hospital_affiliation`, {
-        headers: {
-          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndnY211c2pzdXppcWprenVhcWtkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg5MDA2MjMsImV4cCI6MjA3NDQ3NjYyM30.I-7myV1T0KujlqqcD0nepUU_qvh_7rnQ0GktbNXmmn4',
-          'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndnY211c2pzdXppcWprenVhcWtkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg5MDA2MjMsImV4cCI6MjA3NDQ3NjYyM30.I-7myV1T0KujlqqcD0nepUU_qvh_7rnQ0GktbNXmmn4',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache'
-        }
-      });
+      console.log('🔍 Fetching doctors using Supabase service...');
+      const doctors = await getDoctors();
       
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ Doctors API error response:', errorText);
-        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+      if (doctors && doctors.length > 0) {
+        console.log('✅ Successfully fetched doctors:', doctors);
+        cacheService.set(cacheKey, doctors, CACHE_TTL.MEDIUM);
+        return doctors;
+      } else {
+        console.warn('⚠️ No doctors returned from service, using fallback');
+        throw new Error('No doctors found');
       }
-      
-      const doctors = await response.json();
-      console.log('🔍 Fetched doctors from API:', doctors);
-      
-      const formattedDoctors = doctors?.map((doctor: any) => ({
-        id: doctor.user_id,
-        name: doctor.full_name || 'Dr. Unknown',
-        specialization: doctor.specialization || 'General Medicine',
-        hospital: doctor.hospital_affiliation || 'General Hospital'
-      })) || [];
-      
-      console.log('🔍 Formatted doctors:', formattedDoctors);
-      cacheService.set(cacheKey, formattedDoctors, CACHE_TTL.MEDIUM);
-      return formattedDoctors;
     } catch (error) {
-      console.error('❌ Error fetching doctors:', error);
-      console.log('🔄 Falling back to mock data');
-      // Fallback to mock data
-      const mockDoctors = [
-        { id: 'doc1', name: 'Dr. Smith', specialization: 'Cardiology' },
-        { id: 'doc2', name: 'Dr. Johnson', specialization: 'Neurology' },
-        { id: 'doc3', name: 'Dr. Williams', specialization: 'Dermatology' }
-      ];
-      cacheService.set(cacheKey, mockDoctors, CACHE_TTL.SHORT);
-      return mockDoctors;
+      console.error('❌ Error fetching doctors from service:', error);
+      // The service will handle fallback data, so we can return empty array here
+      // and let the service's fallback mechanism work
+      return [];
     }
   };
 

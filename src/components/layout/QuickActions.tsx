@@ -32,14 +32,6 @@ const QuickActions = () => {
 
   const doctorActions: QuickAction[] = [
     {
-      id: 'upload-record',
-      title: 'Upload Record',
-      icon: Upload,
-      href: '/doctor/patient-records',
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-50 hover:bg-blue-100'
-    },
-    {
       id: 'request-consent',
       title: 'Request Consent',
       icon: UserCheck,
@@ -49,7 +41,7 @@ const QuickActions = () => {
     },
     {
       id: 'schedule',
-      title: 'Schedule',
+      title: 'Schedule Consultation / Meeting',
       icon: Calendar,
       onClick: () => {
         // This will be handled by the dashboard
@@ -70,16 +62,8 @@ const QuickActions = () => {
       bgColor: 'bg-orange-50 hover:bg-orange-100'
     },
     {
-      id: 'ai-analysis',
-      title: 'AI Analysis',
-      icon: BarChart3,
-      href: '/doctor/ai-insights',
-      color: 'text-indigo-600',
-      bgColor: 'bg-indigo-50 hover:bg-indigo-100'
-    },
-    {
       id: 'patients',
-      title: 'My Patients',
+      title: 'View Patients',
       icon: Users,
       href: '/doctor/patients',
       color: 'text-cyan-600',
@@ -158,7 +142,7 @@ const QuickActions = () => {
     <div className="w-full bg-white border-b border-gray-200 py-4">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-6 justify-items-center">
           {actions.map((action) => (
             <Card 
               key={action.id}
