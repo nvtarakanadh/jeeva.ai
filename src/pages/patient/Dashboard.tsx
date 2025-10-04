@@ -556,6 +556,11 @@ const PatientDashboard = () => {
                 : apt
             ));
           }}
+          onSchedule={handleScheduleAppointment}
+          onUpdate={handleUpdateAppointment}
+          isPatientView={true}
+          doctors={doctors}
+          testCenters={testCenters}
         />
       )}
     </div>

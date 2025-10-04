@@ -137,37 +137,40 @@ const PatientCalendarComponent: React.FC<PatientCalendarComponentProps> = memo((
   const dateFormat = "d";
   const rows = [];
 
-  let days = [];
   let day = startDate;
 
   while (day <= endDate) {
+    const days = [];
+    
     for (let i = 0; i < 7; i++) {
+      const cellDate = new Date(day); // Create a new Date object for each cell
       const dayAppointments = appointments.filter(appointment => 
-        isSameDay(appointment.start, day)
+        isSameDay(appointment.start, cellDate)
       );
 
       days.push(
         <div
-          key={day.toString()}
+          key={cellDate.toString()}
           className={`min-h-[120px] p-2 border-r border-b border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors ${
-            !isSameMonth(day, monthStart) ? 'bg-gray-50 text-gray-400' : 'bg-white'
+            !isSameMonth(cellDate, monthStart) ? 'bg-gray-50 text-gray-400' : 'bg-white'
           }`}
-          onClick={() => onDateClick(day)}
+          onClick={() => onDateClick(new Date(cellDate))}
         >
           <div className="flex items-center justify-between mb-1">
             <span className={`text-sm font-medium ${
-              isSameDay(day, new Date()) ? 'bg-blue-500 text-white rounded-full w-6 h-6 flex items-center justify-center' : ''
+              isSameDay(cellDate, new Date()) ? 'bg-blue-500 text-white rounded-full w-6 h-6 flex items-center justify-center' : ''
             }`}>
-              {format(day, dateFormat)}
+              {format(cellDate, dateFormat)}
             </span>
-            {onDayViewClick && isSameMonth(day, monthStart) && (
+            {onDayViewClick && isSameMonth(cellDate, monthStart) && (
               <Button
                 size="sm"
                 variant="ghost"
                 className="h-6 w-6 p-0 opacity-100 hover:bg-blue-100 transition-colors"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onDayViewClick(day);
+                  // Create a new Date object to avoid mutation issues
+                  onDayViewClick(new Date(cellDate));
                 }}
                 title="Open day view"
               >
@@ -206,12 +209,12 @@ const PatientCalendarComponent: React.FC<PatientCalendarComponentProps> = memo((
       );
       day = addDays(day, 1);
     }
+    
     rows.push(
       <div key={day.toString()} className="grid grid-cols-7">
         {days}
       </div>
     );
-    days = [];
   }
 
   const nextMonth = () => {

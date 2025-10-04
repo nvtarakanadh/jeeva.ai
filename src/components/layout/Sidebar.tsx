@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -14,9 +14,16 @@ import {
   CreditCard,
   FlaskConical,
   Pill,
-  Stethoscope
+  Stethoscope,
+  Menu
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface NavItem {
   label: string;
@@ -56,8 +63,13 @@ export const Sidebar: React.FC = () => {
   const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   const navItems = user?.role === 'doctor' ? doctorNavItems : patientNavItems;
+
+  const toggleSidebar = () => {
+    setIsCollapsed(!isCollapsed);
+  };
 
   const handleNavigation = (href: string) => {
     if (href !== '#') {
@@ -66,78 +78,126 @@ export const Sidebar: React.FC = () => {
   };
 
   return (
-    <aside className="w-64 bg-card border-r border-border h-[calc(100vh-4rem)] overflow-y-auto" role="navigation" aria-label="Sidebar Navigation">
-      <div className="p-4 space-y-6">
+    <TooltipProvider>
+      <aside className={cn(
+        "bg-card border-r border-border h-[calc(100vh-4rem)] overflow-y-auto transition-all duration-300",
+        isCollapsed ? "w-16" : "w-64"
+      )} role="navigation" aria-label="Sidebar Navigation">
+        <div className="p-4 space-y-6">
+        {/* Hamburger Menu Button */}
+        <div className="flex justify-center mb-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={toggleSidebar}
+            className="h-8 w-8 p-0 hover:bg-accent transition-colors"
+            aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            <Menu className="h-4 w-4" />
+          </Button>
+        </div>
+
         {/* Main Navigation */}
         <div>
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-            Main Menu
-          </h2>
+          {!isCollapsed && (
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+              Main Menu
+            </h2>
+          )}
           <nav className="space-y-1">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = location.pathname === item.href;
               
-              return (
-                <Button
-                  key={item.href}
-                  variant={isActive ? "secondary" : "ghost"}
-                  className={cn(
-                    "w-full justify-start gap-3 h-10",
-                    isActive && "bg-primary text-primary-foreground hover:bg-primary/90"
+              const button = (
+                <div className="relative">
+                  <Button
+                    key={item.href}
+                    variant={isActive ? "secondary" : "ghost"}
+                    className={cn(
+                      "w-full h-10",
+                      isCollapsed 
+                        ? "justify-center p-0" 
+                        : "justify-start gap-3",
+                      isActive && "bg-primary text-primary-foreground hover:bg-primary/90"
+                    )}
+                    onClick={() => handleNavigation(item.href)}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {!isCollapsed && (
+                      <>
+                        {item.label}
+                        {item.badge && (
+                          <span className="ml-auto text-xs bg-warning text-warning-foreground px-2 py-1 rounded-full">
+                            {item.badge}
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </Button>
+                  {/* Active indicator for collapsed state */}
+                  {isCollapsed && isActive && (
+                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full" />
                   )}
-                  onClick={() => handleNavigation(item.href)}
-                >
-                  <Icon className="h-4 w-4" />
-                  {item.label}
-                  {item.badge && (
-                    <span className="ml-auto text-xs bg-warning text-warning-foreground px-2 py-1 rounded-full">
-                      {item.badge}
-                    </span>
-                  )}
-                </Button>
+                </div>
               );
+
+              return isCollapsed ? (
+                <Tooltip key={item.href}>
+                  <TooltipTrigger asChild>
+                    {button}
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="ml-2">
+                    <p>{item.label}</p>
+                  </TooltipContent>
+                </Tooltip>
+              ) : button;
             })}
           </nav>
         </div>
 
         {/* Coming Soon Section */}
-        <div>
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-            Coming Soon
-          </h2>
-          <nav className="space-y-1">
-            {comingSoonItems.map((item) => {
-              const Icon = item.icon;
-              
-              return (
-                <Button
-                  key={item.label}
-                  variant="ghost"
-                  className="w-full justify-start gap-3 h-10 opacity-60 cursor-not-allowed"
-                  disabled
-                >
-                  <Icon className="h-4 w-4" />
-                  {item.label}
-                  {item.badge && (
-                    <span className="ml-auto text-xs bg-warning text-warning-foreground px-2 py-1 rounded-full">
-                      {item.badge}
-                    </span>
-                  )}
-                </Button>
-              );
-            })}
-          </nav>
-        </div>
+        {!isCollapsed && (
+          <div>
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+              Coming Soon
+            </h2>
+            <nav className="space-y-1">
+              {comingSoonItems.map((item) => {
+                const Icon = item.icon;
+                
+                return (
+                  <Button
+                    key={item.label}
+                    variant="ghost"
+                    className="w-full justify-start gap-3 h-10 opacity-60 cursor-not-allowed"
+                    disabled
+                  >
+                    <Icon className="h-4 w-4" />
+                    {item.label}
+                    {item.badge && (
+                      <span className="ml-auto text-xs bg-warning text-warning-foreground px-2 py-1 rounded-full">
+                        {item.badge}
+                      </span>
+                    )}
+                  </Button>
+                );
+              })}
+            </nav>
+          </div>
+        )}
 
         {/* ABDM Compliance */}
-        <div className="bg-accent-light p-4 rounded-lg">
-          <h3 className="text-sm font-semibold text-accent mb-2">ABDM Compliant</h3>
-          <p className="text-xs text-muted-foreground">
-            This platform follows Ayushman Bharat Digital Mission guidelines for secure health data management.
-          </p>
+        {!isCollapsed && (
+          <div className="bg-accent-light p-4 rounded-lg">
+            <h3 className="text-sm font-semibold text-accent mb-2">ABDM Compliant</h3>
+            <p className="text-xs text-muted-foreground">
+              This platform follows Ayushman Bharat Digital Mission guidelines for secure health data management.
+            </p>
+          </div>
+        )}
         </div>
-      </div>
-    </aside>
+      </aside>
+    </TooltipProvider>
   );
 };

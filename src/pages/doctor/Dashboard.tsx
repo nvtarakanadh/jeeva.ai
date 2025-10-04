@@ -948,6 +948,11 @@ const DoctorDashboard = () => {
           }}
           onMoveEvent={handleMoveEvent}
           onResizeEvent={handleResizeEvent}
+          patients={patients}
+          onSchedule={handleCreateSchedule}
+          onUpdate={handleUpdateEvent}
+          isPatientView={false}
+          doctorName={user?.name}
         />
       )}
     </div>

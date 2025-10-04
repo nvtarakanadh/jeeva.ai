@@ -1,15 +1,13 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import EnhancedSchedulingModal from './EnhancedSchedulingModal';
+import PatientSchedulingModal from './PatientSchedulingModal';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { 
   Clock, 
-  Plus, 
+  Plus,
   User, 
   Stethoscope, 
   Briefcase, 
@@ -20,8 +18,7 @@ import {
   Bell,
   Shield,
   X,
-  Calendar,
-  Save
+  Calendar
 } from 'lucide-react';
 import { format, addMinutes, isSameDay, startOfDay, endOfDay } from 'date-fns';
 
@@ -59,6 +56,14 @@ interface DayViewModalProps {
   onDeleteEvent: (eventId: string) => void;
   onMoveEvent: (eventId: string, newStart: Date, newEnd: Date) => void;
   onResizeEvent: (eventId: string, newEnd: Date) => void;
+  // Additional props for scheduling modal
+  patients?: any[];
+  onSchedule?: (data: any) => void;
+  onUpdate?: (eventId: string, data: any) => void;
+  isPatientView?: boolean;
+  doctorName?: string;
+  doctors?: any[];
+  testCenters?: any[];
 }
 
 const DayViewModal: React.FC<DayViewModalProps> = ({
@@ -70,20 +75,22 @@ const DayViewModal: React.FC<DayViewModalProps> = ({
   onEditEvent,
   onDeleteEvent,
   onMoveEvent,
-  onResizeEvent
+  onResizeEvent,
+  patients = [],
+  onSchedule,
+  onUpdate,
+  isPatientView = false,
+  doctorName,
+  doctors = [],
+  testCenters = []
 }) => {
   const [draggedEvent, setDraggedEvent] = useState<DayViewEvent | null>(null);
   const [dragStartSlot, setDragStartSlot] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [showEventForm, setShowEventForm] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<Date | null>(null);
-  const [eventForm, setEventForm] = useState({
-    title: '',
-    type: 'consultation' as 'consultation' | 'meeting',
-    duration: 30,
-    notes: ''
-  });
+  const [isSchedulingModalOpen, setIsSchedulingModalOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<DayViewEvent | null>(null);
 
   // Check if mobile
   useEffect(() => {
@@ -166,45 +173,66 @@ const DayViewModal: React.FC<DayViewModalProps> = ({
   // Removed vertical calculation functions as we're using horizontal layout
 
   const handleSlotClick = useCallback((slotTime: Date) => {
+    console.log('Slot clicked:', slotTime);
     setSelectedSlot(slotTime);
-    setShowEventForm(true);
+    
+    // Create a temporary event with the selected time for pre-filling
+    const tempEvent = {
+      id: 'temp-slot',
+      title: 'New Event', // Give it a title so it's treated as editing
+      start: slotTime,
+      end: new Date(slotTime.getTime() + 30 * 60000), // 30 minutes default
+      event_type: 'consultation' as const,
+      appointment_type: 'consultation' as const, // For patient modal
+      status: 'pending' as const,
+      patient_name: '',
+      notes: '',
+      doctor_id: '',
+      patient_id: '',
+      test_center_id: '', // For patient modal
+      is_available: true
+    };
+    
+    setEditingEvent(tempEvent);
+    setIsSchedulingModalOpen(true);
   }, []);
 
-  const handleEventFormSubmit = useCallback((e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedSlot || !eventForm.title.trim()) return;
 
-    const startTime = selectedSlot;
-    const endTime = addMinutes(startTime, eventForm.duration);
-    
-    // Pass event data to the callback
-    onScheduleEvent(startTime, eventForm.duration, {
-      title: eventForm.title,
-      type: eventForm.type,
-      notes: eventForm.notes
-    });
-    
-    // Reset form
-    setEventForm({
-      title: '',
-      type: 'consultation',
-      duration: 30,
-      notes: ''
-    });
-    setShowEventForm(false);
+  const handleScheduleModalClose = useCallback(() => {
+    setIsSchedulingModalOpen(false);
     setSelectedSlot(null);
-  }, [selectedSlot, eventForm, onScheduleEvent]);
-
-  const handleEventFormCancel = useCallback(() => {
-    setShowEventForm(false);
-    setSelectedSlot(null);
-    setEventForm({
-      title: '',
-      type: 'consultation',
-      duration: 30,
-      notes: ''
-    });
+    setEditingEvent(null);
   }, []);
+
+  const handleSchedule = useCallback((data: any) => {
+    if (onSchedule) {
+      // If this is a temporary event, treat it as a new schedule
+      if (editingEvent?.id === 'temp-slot') {
+        onSchedule(data);
+      } else {
+        onSchedule(data);
+      }
+    } else if (onScheduleEvent && selectedSlot) {
+      // Fallback to the original onScheduleEvent
+      onScheduleEvent(selectedSlot, data.duration || 30, {
+        title: data.title,
+        type: data.type || data.event_type || 'consultation',
+        notes: data.notes
+      });
+    }
+    handleScheduleModalClose();
+  }, [onSchedule, onScheduleEvent, selectedSlot, editingEvent, handleScheduleModalClose]);
+
+  const handleUpdate = useCallback((data: any) => {
+    if (onUpdate) {
+      if (editingEvent) {
+        onUpdate(editingEvent.id, data);
+      } else {
+        onUpdate('', data);
+      }
+    }
+    handleScheduleModalClose();
+  }, [onUpdate, editingEvent, handleScheduleModalClose]);
 
   const handleEventClick = useCallback((event: DayViewEvent, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -431,128 +459,30 @@ const DayViewModal: React.FC<DayViewModalProps> = ({
           )}
         </div>
 
-        {/* Event Form Modal */}
-        {showEventForm && selectedSlot && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <Card className="w-full max-w-md bg-white shadow-2xl border-0">
-              <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-blue-100 rounded-lg">
-                    <Plus className="h-5 w-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-gray-900">
-                      Add New Event
-                    </h3>
-                    <p className="text-sm text-gray-600">
-                      {format(selectedSlot, 'h:mm a')} on {format(selectedSlot, 'MMM d, yyyy')}
-                    </p>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="p-6">
-                <form onSubmit={handleEventFormSubmit} className="space-y-5">
-                  <div>
-                    <Label htmlFor="title" className="text-sm font-semibold text-gray-700">
-                      Event Title
-                    </Label>
-                    <Input
-                      id="title"
-                      value={eventForm.title}
-                      onChange={(e) => setEventForm(prev => ({ ...prev, title: e.target.value }))}
-                      placeholder="Enter event title"
-                      required
-                      className="mt-1 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                    />
-                  </div>
-                  
-                  <div>
-                    <Label htmlFor="type" className="text-sm font-semibold text-gray-700">
-                      Event Type
-                    </Label>
-                    <Select
-                      value={eventForm.type}
-                      onValueChange={(value: 'consultation' | 'meeting') => 
-                        setEventForm(prev => ({ ...prev, type: value }))
-                      }
-                    >
-                      <SelectTrigger className="mt-1 border-gray-300 focus:border-blue-500 focus:ring-blue-500">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="consultation">
-                          <div className="flex items-center gap-2">
-                            <Stethoscope className="h-4 w-4 text-green-600" />
-                            <span>Consultation</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="meeting">
-                          <div className="flex items-center gap-2">
-                            <Briefcase className="h-4 w-4 text-purple-600" />
-                            <span>Meeting</span>
-                          </div>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div>
-                    <Label htmlFor="duration" className="text-sm font-semibold text-gray-700">
-                      Duration
-                    </Label>
-                    <Select
-                      value={eventForm.duration.toString()}
-                      onValueChange={(value) => 
-                        setEventForm(prev => ({ ...prev, duration: parseInt(value) }))
-                      }
-                    >
-                      <SelectTrigger className="mt-1 border-gray-300 focus:border-blue-500 focus:ring-blue-500">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="30">30 minutes</SelectItem>
-                        <SelectItem value="60">1 hour</SelectItem>
-                        <SelectItem value="90">1.5 hours</SelectItem>
-                        <SelectItem value="120">2 hours</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div>
-                    <Label htmlFor="notes" className="text-sm font-semibold text-gray-700">
-                      Notes (optional)
-                    </Label>
-                    <Textarea
-                      id="notes"
-                      value={eventForm.notes}
-                      onChange={(e) => setEventForm(prev => ({ ...prev, notes: e.target.value }))}
-                      placeholder="Add notes or description..."
-                      rows={3}
-                      className="mt-1 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                    />
-                  </div>
-                  
-                  <div className="flex gap-3 pt-4">
-                    <Button 
-                      type="submit" 
-                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
-                    >
-                      <Save className="h-4 w-4 mr-2" />
-                      Save Event
-                    </Button>
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      onClick={handleEventFormCancel}
-                      className="px-6 border-gray-300 hover:bg-gray-50 transition-colors"
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
-          </div>
+        {/* Scheduling Modal */}
+        {isPatientView ? (
+          <PatientSchedulingModal
+            isOpen={isSchedulingModalOpen}
+            onClose={handleScheduleModalClose}
+            selectedDate={selectedSlot || selectedDate}
+            onSchedule={handleSchedule}
+            onUpdate={handleUpdate}
+            editingAppointment={editingEvent as any}
+            doctors={doctors}
+            testCenters={testCenters}
+          />
+        ) : (
+          <EnhancedSchedulingModal
+            isOpen={isSchedulingModalOpen}
+            onClose={handleScheduleModalClose}
+            selectedDate={selectedSlot || selectedDate}
+            patients={patients}
+            onSchedule={handleSchedule}
+            onUpdate={handleUpdate}
+            editingEvent={editingEvent}
+            isPatientView={isPatientView}
+            doctorName={doctorName}
+          />
         )}
       </DialogContent>
     </Dialog>
