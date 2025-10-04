@@ -29,7 +29,7 @@ export interface PatientAppointment {
   start: Date;
   end: Date;
   appointment_type: 'consultation' | 'lab_test' | 'scanning' | 'other';
-  status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
+  status: 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'scheduled';
   doctor_name?: string;
   test_center?: string;
   notes?: string;

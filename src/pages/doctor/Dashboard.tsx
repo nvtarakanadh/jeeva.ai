@@ -17,7 +17,7 @@ import { ProgressiveStats, ProgressiveList } from '@/components/ui/progressive-l
 import QuickActions from '@/components/layout/QuickActions';
 import { lazy, Suspense } from 'react';
 import EnhancedCalendarComponent from '@/components/calendar/EnhancedCalendarComponent';
-import EnhancedSchedulingModal from '@/components/calendar/EnhancedSchedulingModal';
+import DoctorSchedulingModal, { DoctorScheduleData } from '@/components/calendar/DoctorSchedulingModal';
 import DayViewModal from '@/components/calendar/DayViewModal';
 
 const CalendarComponent = lazy(() => import('@/components/calendar/CalendarComponent'));
@@ -426,7 +426,7 @@ const DoctorDashboard = () => {
     }
   };
 
-  const handleUpdateEvent = async (eventId: string, scheduleData: any) => {
+  const handleUpdateEvent = async (eventId: string, scheduleData: DoctorScheduleData) => {
     console.log('=== UPDATE FUNCTION CALLED ===');
     console.log('Event ID:', eventId);
     console.log('Schedule Data:', scheduleData);
@@ -550,7 +550,7 @@ const DoctorDashboard = () => {
   };
 
   // Create new schedule
-  const handleCreateSchedule = async (scheduleData: any) => {
+  const handleCreateSchedule = async (scheduleData: DoctorScheduleData) => {
     if (!doctorProfileId) {
       alert('No doctor profile ID available!');
       return;
@@ -704,6 +704,50 @@ const DoctorDashboard = () => {
       isMounted = false;
     };
   }, [doctorProfileId, loadEvents, loadPatients]);
+
+  // Real-time subscription for consultations
+  useEffect(() => {
+    if (!doctorProfileId) return;
+
+    let subscription: any;
+
+    const setupRealtimeSubscription = () => {
+      // Subscribe to consultations changes for this doctor
+      subscription = supabase
+        .channel('doctor-consultations')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'consultations',
+            filter: `doctor_id=eq.${doctorProfileId}`
+          },
+          (payload) => {
+            console.log('🔄 Real-time consultation update for doctor:', payload);
+            
+            // Refresh events when consultations change
+            loadEvents();
+          }
+        )
+        .subscribe((status) => {
+          console.log('📡 Doctor consultation subscription status:', status);
+          if (status === 'SUBSCRIBED') {
+            console.log('✅ Successfully subscribed to doctor consultations');
+          } else if (status === 'CHANNEL_ERROR') {
+            console.error('❌ Error subscribing to doctor consultations');
+          }
+        });
+    };
+
+    setupRealtimeSubscription();
+
+    return () => {
+      if (subscription) {
+        supabase.removeChannel(subscription);
+      }
+    };
+  }, [doctorProfileId, loadEvents]);
 
   // Memoize quick stats to prevent unnecessary re-renders
   const quickStats = useMemo(() => [
@@ -866,8 +910,8 @@ const DoctorDashboard = () => {
         </CardContent>
       </Card>
 
-      {/* Enhanced Scheduling Modal */}
-      <EnhancedSchedulingModal
+      {/* Doctor Scheduling Modal */}
+      <DoctorSchedulingModal
         isOpen={isScheduleModalOpen}
         onClose={() => {
           setIsScheduleModalOpen(false);
@@ -878,8 +922,28 @@ const DoctorDashboard = () => {
         onSchedule={handleCreateSchedule}
         onUpdate={handleUpdateEvent}
         editingEvent={editingEvent}
-        isPatientView={false}
-        doctorName={user?.name}
+        asDialog={true}
+        existingAppointments={events.map(event => {
+          const mappedEvent = {
+            id: event.id,
+            title: event.title,
+            start: event.start,
+            end: event.end,
+            event_type: event.type,
+            status: event.status,
+            patient_name: event.patientName,
+            notes: event.notes,
+            patient_id: event.patientId,
+            doctor_id: event.doctorId
+          };
+          
+          // Debug logging for first few events
+          if (events.indexOf(event) < 3) {
+            console.log('📅 Mapping event for availability check:', mappedEvent);
+          }
+          
+          return mappedEvent;
+        })}
       />
       
 

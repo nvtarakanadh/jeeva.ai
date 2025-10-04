@@ -33,6 +33,8 @@ export class ScheduleService {
           doctor_id,
           consultation_date,
           consultation_time,
+          end_time,
+          duration_minutes,
           reason,
           notes,
           status,
@@ -49,7 +51,7 @@ export class ScheduleService {
       console.log('Fetched consultations:', consultations);
 
       // Convert consultations to calendar events
-      const events: CalendarEvent[] = consultations?.map((consultation) => {
+      const events: CalendarEvent[] = consultations?.map((consultation: any) => {
         const consultationDate = new Date(consultation.consultation_date);
         const [hours, minutes] = consultation.consultation_time.split(':').map(Number);
         
@@ -57,9 +59,17 @@ export class ScheduleService {
         const startTime = new Date(consultationDate);
         startTime.setHours(hours, minutes, 0, 0);
         
-        // Assume 30 minutes duration for consultations
-        const endTime = new Date(startTime);
-        endTime.setMinutes(endTime.getMinutes() + 30);
+        // Use end_time from database if available, otherwise calculate from duration
+        let endTime: Date;
+        if (consultation.end_time) {
+          const [endHours, endMinutes] = consultation.end_time.split(':').map(Number);
+          endTime = new Date(consultationDate);
+          endTime.setHours(endHours, endMinutes, 0, 0);
+        } else {
+          // Fallback to calculating from duration
+          const duration = consultation.duration_minutes || 30;
+          endTime = new Date(startTime.getTime() + duration * 60000);
+        }
 
         const patientName = consultation.profiles?.full_name || 'Unknown Patient';
         

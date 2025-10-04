@@ -19,23 +19,60 @@ ALTER TABLE public.consultations ENABLE ROW LEVEL SECURITY;
 -- Create RLS policies for consultations
 DROP POLICY IF EXISTS "Patients can view their consultations" ON public.consultations;
 CREATE POLICY "Patients can view their consultations" ON public.consultations
-    FOR SELECT USING (patient_id = auth.uid());
+    FOR SELECT USING (
+        patient_id IN (
+            SELECT id FROM public.profiles WHERE user_id = auth.uid()
+        )
+    );
 
 DROP POLICY IF EXISTS "Doctors can view their consultations" ON public.consultations;
 CREATE POLICY "Doctors can view their consultations" ON public.consultations
-    FOR SELECT USING (doctor_id = auth.uid());
+    FOR SELECT USING (
+        doctor_id IN (
+            SELECT id FROM public.profiles WHERE user_id = auth.uid()
+        )
+    );
 
 DROP POLICY IF EXISTS "Patients can create consultations" ON public.consultations;
 CREATE POLICY "Patients can create consultations" ON public.consultations
-    FOR INSERT WITH CHECK (patient_id = auth.uid());
+    FOR INSERT WITH CHECK (
+        patient_id IN (
+            SELECT id FROM public.profiles WHERE user_id = auth.uid()
+        )
+    );
 
 DROP POLICY IF EXISTS "Patients can update their consultations" ON public.consultations;
 CREATE POLICY "Patients can update their consultations" ON public.consultations
-    FOR UPDATE USING (patient_id = auth.uid());
+    FOR UPDATE USING (
+        patient_id IN (
+            SELECT id FROM public.profiles WHERE user_id = auth.uid()
+        )
+    );
 
 DROP POLICY IF EXISTS "Doctors can update their consultations" ON public.consultations;
 CREATE POLICY "Doctors can update their consultations" ON public.consultations
-    FOR UPDATE USING (doctor_id = auth.uid());
+    FOR UPDATE USING (
+        doctor_id IN (
+            SELECT id FROM public.profiles WHERE user_id = auth.uid()
+        )
+    );
+
+-- Add delete policies
+DROP POLICY IF EXISTS "Patients can delete their consultations" ON public.consultations;
+CREATE POLICY "Patients can delete their consultations" ON public.consultations
+    FOR DELETE USING (
+        patient_id IN (
+            SELECT id FROM public.profiles WHERE user_id = auth.uid()
+        )
+    );
+
+DROP POLICY IF EXISTS "Doctors can delete their consultations" ON public.consultations;
+CREATE POLICY "Doctors can delete their consultations" ON public.consultations
+    FOR DELETE USING (
+        doctor_id IN (
+            SELECT id FROM public.profiles WHERE user_id = auth.uid()
+        )
+    );
 
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_consultations_patient_id ON public.consultations(patient_id);

@@ -64,6 +64,7 @@ interface DayViewModalProps {
   doctorName?: string;
   doctors?: any[];
   testCenters?: any[];
+  onSlotClick?: (timeSlot: Date) => void;
 }
 
 const DayViewModal: React.FC<DayViewModalProps> = ({
@@ -82,7 +83,8 @@ const DayViewModal: React.FC<DayViewModalProps> = ({
   isPatientView = false,
   doctorName,
   doctors = [],
-  testCenters = []
+  testCenters = [],
+  onSlotClick
 }) => {
   const [draggedEvent, setDraggedEvent] = useState<DayViewEvent | null>(null);
   const [dragStartSlot, setDragStartSlot] = useState<number | null>(null);
@@ -173,29 +175,38 @@ const DayViewModal: React.FC<DayViewModalProps> = ({
   // Removed vertical calculation functions as we're using horizontal layout
 
   const handleSlotClick = useCallback((slotTime: Date) => {
-    console.log('Slot clicked:', slotTime);
+    console.log('🎯 Slot clicked:', slotTime);
     setSelectedSlot(slotTime);
     
-    // Create a temporary event with the selected time for pre-filling
-    const tempEvent = {
-      id: 'temp-slot',
-      title: 'New Event', // Give it a title so it's treated as editing
-      start: slotTime,
-      end: new Date(slotTime.getTime() + 30 * 60000), // 30 minutes default
-      event_type: 'consultation' as const,
-      appointment_type: 'consultation' as const, // For patient modal
-      status: 'pending' as const,
-      patient_name: '',
-      notes: '',
-      doctor_id: '',
-      patient_id: '',
-      test_center_id: '', // For patient modal
-      is_available: true
-    };
-    
-    setEditingEvent(tempEvent);
-    setIsSchedulingModalOpen(true);
-  }, []);
+    // Call the parent callback if provided
+    if (onSlotClick) {
+      onSlotClick(slotTime);
+    } else {
+      // Fallback to the old behavior
+      // Create a temporary event with the selected time for pre-filling
+      const tempEvent = {
+        id: 'temp-slot',
+        title: 'New Event', // Give it a title so it's treated as editing
+        start: slotTime,
+        end: new Date(slotTime.getTime() + 30 * 60000), // 30 minutes default
+        event_type: 'consultation' as const,
+        appointment_type: 'consultation' as const, // For patient modal
+        status: 'pending' as const,
+        patient_name: '',
+        doctor_name: '',
+        notes: '',
+        doctor_id: '',
+        patient_id: '',
+        test_center_id: '', // For patient modal
+        is_available: true
+      };
+      
+      console.log('🎯 Setting editingEvent:', tempEvent);
+      setEditingEvent(tempEvent);
+      console.log('🎯 Setting isSchedulingModalOpen to true');
+      setIsSchedulingModalOpen(true);
+    }
+  }, [onSlotClick]);
 
 
   const handleScheduleModalClose = useCallback(() => {
@@ -328,9 +339,14 @@ const DayViewModal: React.FC<DayViewModalProps> = ({
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                   {getEventIcon(event.event_type, event.status)}
-                                  <span className="text-sm font-semibold">
-                                    {event.title}
-                                  </span>
+                                  <div>
+                                    <span className="text-sm font-semibold">
+                                      {event.title}
+                                    </span>
+                                    <div className="text-xs text-gray-600 mt-1">
+                                      {format(event.start, 'h:mm a')} – {format(event.end, 'h:mm a')}
+                                    </div>
+                                  </div>
                                 </div>
                                 <Button
                                   variant="ghost"
@@ -427,9 +443,14 @@ const DayViewModal: React.FC<DayViewModalProps> = ({
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-1">
                                   {getEventIcon(event.event_type, event.status)}
-                                  <span className="text-xs font-semibold truncate">
-                                    {event.title}
-                                  </span>
+                                  <div className="min-w-0 flex-1">
+                                    <span className="text-xs font-semibold truncate block">
+                                      {event.title}
+                                    </span>
+                                    <span className="text-xs text-gray-600 truncate block">
+                                      {format(event.start, 'h:mm')} – {format(event.end, 'h:mm')}
+                                    </span>
+                                  </div>
                                 </div>
                                 <Button
                                   variant="ghost"
@@ -470,6 +491,19 @@ const DayViewModal: React.FC<DayViewModalProps> = ({
             editingAppointment={editingEvent as any}
             doctors={doctors}
             testCenters={testCenters}
+            asDialog={false}
+            existingAppointments={events.map(event => ({
+              id: event.id,
+              title: event.title,
+              start: event.start,
+              end: event.end,
+              appointment_type: event.event_type === 'consultation' ? 'consultation' : 'other',
+              status: event.status as 'pending' | 'confirmed' | 'cancelled' | 'scheduled',
+              doctor_name: event.patient_name,
+              notes: event.notes,
+              patient_id: event.patient_id || '',
+              doctor_id: event.doctor_id
+            }))}
           />
         ) : (
           <EnhancedSchedulingModal

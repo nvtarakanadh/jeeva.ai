@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { FileText, Shield, Activity, AlertCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { format, addMinutes } from 'date-fns';
 import { getHealthRecordSummary } from '@/services/healthRecordsService';
 import { getAIInsightSummary } from '@/services/aiInsightsService';
 import { getRecentActivity, formatTimeAgo } from '@/services/activityService';
@@ -35,7 +36,220 @@ const PatientDashboard = () => {
   const [isDayViewOpen, setIsDayViewOpen] = useState(false);
   const [dayViewDate, setDayViewDate] = useState<Date | null>(null);
   const [doctors, setDoctors] = useState<Array<{ id: string; name: string; specialization?: string }>>([]);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [testCenters, setTestCenters] = useState<Array<{ id: string; name: string; address?: string }>>([]);
+
+  // Test function for debugging deletion
+  const testDeletion = async (consultationId: string) => {
+    console.log('🧪 Testing deletion for:', consultationId);
+    
+    try {
+      // Test 1: Check current user and profile
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) {
+        console.error('❌ Auth error:', authError);
+        return false;
+      }
+      console.log('✅ Current user:', user?.email);
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, full_name, role, user_id')
+        .eq('user_id', user?.id)
+        .single();
+      
+      if (profileError) {
+        console.error('❌ Profile error:', profileError);
+        return false;
+      }
+      console.log('✅ Profile:', profile);
+
+      // Test 2: Check if consultation exists
+      const { data: existing, error: fetchError } = await supabase
+        .from('consultations')
+        .select('id, patient_id, doctor_id, reason, status, consent_id')
+        .eq('id', consultationId)
+        .single();
+      
+      if (fetchError) {
+        console.error('❌ Fetch error:', fetchError);
+        return false;
+      }
+      
+      console.log('✅ Consultation exists:', existing);
+      
+      // Test 3: Check if user owns this consultation
+      if (existing.patient_id !== profile.id) {
+        console.error('❌ User does not own this consultation');
+        console.log('Consultation patient_id:', existing.patient_id);
+        console.log('User profile_id:', profile.id);
+        return false;
+      }
+      console.log('✅ User owns this consultation');
+      
+      // Test 4: Check RLS permissions by trying to select
+      const { data: rlsTest, error: rlsError } = await supabase
+        .from('consultations')
+        .select('id')
+        .eq('id', consultationId);
+      
+      if (rlsError) {
+        console.error('❌ RLS error:', rlsError);
+        return false;
+      }
+      
+      console.log('✅ RLS permissions OK:', rlsTest);
+      
+      // Test 5: Handle consent_id constraint before deletion
+      if (existing.consent_id) {
+        console.log('🔧 Setting consent_id to NULL before deletion...');
+        const { error: updateError } = await supabase
+          .from('consultations')
+          .update({ consent_id: null })
+          .eq('id', consultationId);
+        
+        if (updateError) {
+          console.warn('⚠️ Warning: Could not set consent_id to NULL:', updateError);
+        } else {
+          console.log('✅ consent_id set to NULL');
+        }
+      }
+      
+      // Test 6: Attempt deletion
+      console.log('🗑️ Attempting deletion...');
+      const { data: deleteResult, error: deleteError } = await supabase
+        .from('consultations')
+        .delete()
+        .eq('id', consultationId)
+        .select();
+      
+      if (deleteError) {
+        console.error('❌ Delete error:', deleteError);
+        console.error('Error details:', {
+          code: deleteError.code,
+          message: deleteError.message,
+          details: deleteError.details,
+          hint: deleteError.hint
+        });
+        return false;
+      }
+      
+      console.log('✅ Delete result:', deleteResult);
+      
+      // Test 7: Verify deletion
+      const { data: verifyResult, error: verifyError } = await supabase
+        .from('consultations')
+        .select('id')
+        .eq('id', consultationId);
+      
+      if (verifyError) {
+        console.error('❌ Verify error:', verifyError);
+      } else {
+        console.log('🔍 Verification result:', verifyResult);
+        if (verifyResult && verifyResult.length === 0) {
+          console.log('🎉 Deletion verified successfully!');
+        } else {
+          console.log('⚠️ Deletion verification failed - consultation still exists');
+        }
+      }
+      
+      return true;
+      
+    } catch (error) {
+      console.error('❌ Test error:', error);
+      return false;
+    }
+  };
+
+  // Expose test function to window for debugging
+  React.useEffect(() => {
+    (window as any).testDeletion = testDeletion;
+    (window as any).listConsultations = async () => {
+      const { data: consultations, error } = await supabase
+        .from('consultations')
+        .select(`
+          id,
+          consultation_date,
+          consultation_time,
+          reason,
+          status,
+          consent_id,
+          profiles!consultations_patient_id_fkey(full_name)
+        `)
+        .eq('profiles.user_id', user?.id);
+      
+      if (error) {
+        console.error('Error listing consultations:', error);
+        return [];
+      }
+      
+      console.log('📋 Current consultations:', consultations);
+      return consultations;
+    };
+    console.log('🧪 Debug functions available:');
+    console.log('- window.testDeletion(consultationId) - Test deletion');
+    console.log('- window.listConsultations() - List all consultations');
+  }, [user?.id, testDeletion]);
+
+  // Also expose immediately for debugging
+  (window as any).testDeletion = testDeletion;
+  (window as any).listConsultations = async () => {
+    if (!user?.id) {
+      console.error('❌ No user logged in');
+      return [];
+    }
+    
+    const { data: consultations, error } = await supabase
+      .from('consultations')
+      .select(`
+        id,
+        consultation_date,
+        consultation_time,
+        reason,
+        status,
+        consent_id,
+        profiles!consultations_patient_id_fkey(full_name)
+      `)
+      .eq('profiles.user_id', user.id);
+    
+    if (error) {
+      console.error('Error listing consultations:', error);
+      return [];
+    }
+    
+    console.log('📋 Current consultations:', consultations);
+    return consultations;
+  };
+
+  // Add a simple test function that doesn't depend on component state
+  (window as any).testDeletionSimple = async (consultationId) => {
+    console.log('🧪 Testing deletion for:', consultationId);
+    
+    try {
+      const { data, error } = await supabase
+        .from('consultations')
+        .delete()
+        .eq('id', consultationId)
+        .select();
+      
+      if (error) {
+        console.error('❌ Delete error:', error);
+        return false;
+      }
+      
+      console.log('✅ Delete result:', data);
+      return true;
+    } catch (error) {
+      console.error('❌ Test error:', error);
+      return false;
+    }
+  };
+
+  console.log('🧪 Debug functions loaded!');
+  console.log('Available functions:');
+  console.log('- window.testDeletion(consultationId)');
+  console.log('- window.listConsultations()');
+  console.log('- window.testDeletionSimple(consultationId)');
 
   useEffect(() => {
     const loadDashboardData = async () => {
@@ -102,6 +316,78 @@ const PatientDashboard = () => {
     loadDashboardData();
   }, [user?.id]);
 
+  // Real-time subscription for consultations
+  useEffect(() => {
+    if (!user?.id) return;
+
+    let subscription: any;
+
+    const setupRealtimeSubscription = async () => {
+      // Get patient profile ID
+      const { data: patientProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (profileError || !patientProfile) {
+        console.error('Patient profile not found for real-time subscription:', profileError);
+        return;
+      }
+
+      // Subscribe to consultations changes
+      subscription = supabase
+        .channel('patient-consultations')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'consultations',
+            filter: `patient_id=eq.${patientProfile.id}`
+          },
+          (payload) => {
+            console.log('🔄 Real-time consultation update:', payload);
+            
+            // Skip real-time updates if we're currently deleting
+            if (isDeleting) {
+              console.log('⏸️ Skipping real-time update - deletion in progress');
+              return;
+            }
+            
+            // Only refresh on INSERT and UPDATE, not DELETE (to avoid reloading deleted items)
+            if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+              console.log('🔄 Refreshing appointments due to INSERT/UPDATE');
+              // Clear cache and refresh from database
+              const cacheKey = createCacheKey('patient-appointments', user.id);
+              cacheService.delete(cacheKey);
+              
+              getCachedAppointments(user.id).then((appointments) => {
+                setAppointments(appointments as PatientAppointment[]);
+              });
+            } else if (payload.eventType === 'DELETE') {
+              console.log('🔄 Handling DELETE event - removing from local state');
+              // For DELETE events, just remove from local state
+              const deletedId = (payload as any).old_record?.id;
+              if (deletedId) {
+                setAppointments(prev => prev.filter(apt => apt.id !== deletedId));
+                console.log('✅ Removed deleted consultation from local state');
+              }
+            }
+          }
+        )
+        .subscribe();
+    };
+
+    setupRealtimeSubscription();
+
+    return () => {
+      if (subscription) {
+        supabase.removeChannel(subscription);
+      }
+    };
+  }, [user?.id, isDeleting]);
+
   // Cached fetchers
   const getCachedHealthRecords = async (userId: string) => {
     const cacheKey = createCacheKey('health-records', userId);
@@ -159,33 +445,59 @@ const PatientDashboard = () => {
     if (cached) return cached;
     
     try {
-      // Fetch real consultations from Supabase using direct fetch
-      const response = await fetch(`https://wgcmusjsuziqjkzuaqkd.supabase.co/rest/v1/consultations?patient_id=eq.${userId}&select=id,consultation_date,consultation_time,reason,notes,status,doctor_id&order=consultation_date`, {
-        headers: {
-          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndnY211c2pzdXppcWprenVhcWtkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg5MDA2MjMsImV4cCI6MjA3NDQ3NjYyM30.I-7myV1T0KujlqqcD0nepUU_qvh_7rnQ0GktbNXmmn4',
-          'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndnY211c2pzdXppcWprenVhcWtkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg5MDA2MjMsImV4cCI6MjA3NDQ3NjYyM30.I-7myV1T0KujlqqcD0nepUU_qvh_7rnQ0GktbNXmmn4',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache'
-        }
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ Consultations API error response:', errorText);
-        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+      // Get patient profile ID first
+      const { data: patientProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('user_id', userId)
+        .single();
+
+      if (profileError || !patientProfile) {
+        console.error('Patient profile not found:', profileError);
+        return [];
       }
-      
-      const consultations = await response.json();
-      
-      const formattedAppointments: PatientAppointment[] = consultations?.map(consultation => {
+
+          // Fetch consultations using the consultation service
+          const { data: consultations, error: consultationError } = await supabase
+            .from('consultations')
+            .select(`
+              id,
+              consultation_date,
+              consultation_time,
+              end_time,
+              duration_minutes,
+              reason,
+              notes,
+              status,
+              doctor_id,
+              profiles!consultations_doctor_id_fkey(full_name)
+            `)
+            .eq('patient_id', patientProfile.id)
+            .order('consultation_date', { ascending: true });
+
+      if (consultationError) {
+        console.error('Error fetching consultations:', consultationError);
+        return [];
+      }
+
+          const formattedAppointments: PatientAppointment[] = consultations?.map((consultation: any) => {
         // Combine date and time to create start time
         const consultationDate = new Date(consultation.consultation_date);
         const [hours, minutes] = consultation.consultation_time.split(':').map(Number);
         const startTime = new Date(consultationDate);
         startTime.setHours(hours, minutes, 0, 0);
         
-        // Add 30 minutes for end time (default consultation duration)
-        const endTime = new Date(startTime.getTime() + 30 * 60000);
+            // Use end_time from database if available, otherwise calculate from duration
+            let endTime: Date;
+            if (consultation.end_time) {
+              const [endHours, endMinutes] = consultation.end_time.split(':').map(Number);
+              endTime = new Date(consultationDate);
+              endTime.setHours(endHours, endMinutes, 0, 0);
+            } else {
+              // Fallback to calculating from duration
+              const duration = consultation.duration_minutes || 30;
+              endTime = new Date(startTime.getTime() + duration * 60000);
+            }
         
         return {
           id: consultation.id,
@@ -193,8 +505,8 @@ const PatientDashboard = () => {
           start: startTime,
           end: endTime,
           appointment_type: 'consultation' as const,
-          status: consultation.status as 'pending' | 'confirmed' | 'cancelled',
-          doctor_name: 'Dr. Unknown', // Will be populated separately
+              status: consultation.status as 'pending' | 'confirmed' | 'cancelled' | 'scheduled',
+              doctor_name: consultation.profiles?.full_name || 'Dr. Unknown',
           notes: consultation.notes || '',
           patient_id: userId,
           doctor_id: consultation.doctor_id
@@ -205,7 +517,7 @@ const PatientDashboard = () => {
       return formattedAppointments;
     } catch (error) {
       console.error('Error fetching consultations:', error);
-      // Fallback to mock data
+      // Fallback to empty array
       const mockAppointments: PatientAppointment[] = [];
       cacheService.set(cacheKey, mockAppointments, CACHE_TTL.SHORT);
       return mockAppointments;
@@ -298,7 +610,98 @@ const PatientDashboard = () => {
     }));
   };
 
-  const handleScheduleAppointment = (data: PatientScheduleData) => {
+  const handleScheduleAppointment = async (data: PatientScheduleData) => {
+    try {
+      console.log('📅 Scheduling appointment:', data);
+      
+      // Only save consultations to Supabase, other appointment types can be local
+      if (data.appointment_type === 'consultation' && data.doctor_id) {
+        console.log('Creating consultation in Supabase...');
+        
+        // Get patient profile ID
+        const { data: patientProfile, error: profileError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('user_id', user?.id)
+          .single();
+
+        if (profileError || !patientProfile) {
+          console.error('❌ Patient profile not found:', profileError);
+          alert(`Patient profile not found: ${profileError.message}`);
+          throw new Error('Patient profile not found');
+        }
+
+        console.log('Patient profile ID:', patientProfile.id);
+
+        // Calculate end time
+        const [hours, minutes] = data.time.split(':').map(Number);
+        const startDate = new Date();
+        startDate.setHours(hours, minutes, 0, 0);
+        const endDate = addMinutes(startDate, data.duration);
+        const endTime = format(endDate, 'HH:mm');
+
+        // Save consultation to Supabase
+        const consultationData = {
+          patient_id: patientProfile.id,
+          doctor_id: data.doctor_id,
+          consultation_date: data.date,
+          consultation_time: data.time,
+          end_time: endTime,
+          duration_minutes: data.duration,
+          reason: data.title,
+          notes: data.notes,
+          status: 'scheduled' as const
+        };
+        
+        console.log('Consultation data:', consultationData);
+        
+        const { data: consultation, error: consultationError } = await supabase
+          .from('consultations')
+          .insert(consultationData)
+          .select(`
+            id,
+            patient_id,
+            doctor_id,
+            consultation_date,
+            consultation_time,
+            end_time,
+            duration_minutes,
+            reason,
+            notes,
+            status,
+            profiles!consultations_patient_id_fkey(full_name)
+          `)
+          .single();
+
+        if (consultationError) {
+          console.error('❌ Error creating consultation:', consultationError);
+          alert(`Failed to create consultation: ${consultationError.message}`);
+          throw consultationError;
+        }
+
+        console.log('✅ Consultation created in Supabase:', consultation);
+
+        // Convert to calendar event format
+        const startTime = new Date(`${data.date}T${data.time}`);
+        const newAppointment: PatientAppointment = {
+          id: (consultation as any).id,
+          title: data.title,
+          start: startTime,
+          end: new Date(startTime.getTime() + (data.duration * 60000)),
+          appointment_type: data.appointment_type,
+          status: 'scheduled',
+          doctor_name: doctors.find(d => d.id === data.doctor_id)?.name,
+          notes: data.notes,
+          patient_id: user?.id || '',
+          doctor_id: data.doctor_id
+        };
+
+        setAppointments(prev => [...prev, newAppointment]);
+        console.log('✅ Consultation added to local state');
+        
+      } else {
+        console.log('Creating local appointment...');
+        // For non-consultation appointments, add to local state only
     const startTime = new Date(`${data.date}T${data.time}`);
     const newAppointment: PatientAppointment = {
       id: `appt-${Date.now()}`,
@@ -314,12 +717,62 @@ const PatientDashboard = () => {
       doctor_id: data.doctor_id,
       test_center_id: data.test_center_id
     };
-
     setAppointments(prev => [...prev, newAppointment]);
+        console.log('✅ Local appointment created');
+      }
+    } catch (error) {
+      console.error('❌ Error scheduling appointment:', error);
+      alert(`Failed to schedule appointment: ${error.message}`);
+    } finally {
     setIsSchedulingModalOpen(false);
+    }
   };
 
-  const handleUpdateAppointment = (appointmentId: string, data: PatientScheduleData) => {
+  const handleUpdateAppointment = async (appointmentId: string, data: PatientScheduleData) => {
+    try {
+      console.log('📝 Updating appointment:', appointmentId, data);
+      
+      // Check if it's a consultation (has UUID format)
+      const isConsultation = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(appointmentId);
+      
+      if (isConsultation && data.appointment_type === 'consultation') {
+        // Calculate end time
+        const [hours, minutes] = data.time.split(':').map(Number);
+        const startDate = new Date();
+        startDate.setHours(hours, minutes, 0, 0);
+        const endDate = addMinutes(startDate, data.duration);
+        const endTime = format(endDate, 'HH:mm');
+        
+        // Update in Supabase
+        const updateData = {
+          consultation_date: data.date,
+          consultation_time: data.time,
+          end_time: endTime,
+          duration_minutes: data.duration,
+          reason: data.title,
+          notes: data.notes,
+          status: (data.status === 'pending' ? 'scheduled' : data.status) as 'confirmed' | 'cancelled' | 'scheduled' | 'scheduled_no_consent' | 'completed'
+        };
+        
+        console.log('Updating consultation with data:', updateData);
+        
+        const { data: updatedConsultation, error } = await supabase
+          .from('consultations')
+          .update(updateData)
+          .eq('id', appointmentId)
+          .select();
+        
+        if (error) {
+          console.error('❌ Error updating consultation:', error);
+          alert(`Failed to update consultation: ${error.message}`);
+          return;
+        }
+        
+        console.log('✅ Consultation updated in Supabase:', updatedConsultation);
+        alert('Consultation updated successfully!');
+      }
+      
+      // Update local state
     const startTime = new Date(`${data.date}T${data.time}`);
     setAppointments(prev => prev.map(appointment => 
       appointment.id === appointmentId 
@@ -338,8 +791,15 @@ const PatientDashboard = () => {
           }
         : appointment
     ));
+      
+      console.log('✅ Appointment updated successfully');
+    } catch (error) {
+      console.error('❌ Error updating appointment:', error);
+      alert(`Failed to update appointment: ${error.message}`);
+    } finally {
     setIsSchedulingModalOpen(false);
     setEditingAppointment(null);
+    }
   };
 
   const handleCancelAppointment = (appointmentId: string) => {
@@ -517,20 +977,18 @@ const PatientDashboard = () => {
           selectedDate={dayViewDate}
           events={convertToDayViewEvents(appointments)}
           onScheduleEvent={(timeSlot, duration, eventData) => {
-            // Handle scheduling new events from day view
-            const startTime = timeSlot;
-            const newAppointment: PatientAppointment = {
-              id: `appt-${Date.now()}`,
+            // Handle scheduling new events from day view - use the same logic as handleScheduleAppointment
+            const scheduleData: PatientScheduleData = {
               title: eventData?.title || 'New Appointment',
-              start: startTime,
-              end: new Date(startTime.getTime() + (duration * 60000)),
               appointment_type: eventData?.type === 'consultation' ? 'consultation' : 'other',
-              status: 'pending',
+              date: format(timeSlot, 'yyyy-MM-dd'),
+              time: format(timeSlot, 'HH:mm'),
+              duration: duration,
+              doctor_id: '', // Will be set when user selects a doctor in the modal
               notes: eventData?.notes || '',
-              patient_id: user?.id || '',
-              doctor_id: undefined
+              status: 'pending'
             };
-            setAppointments(prev => [...prev, newAppointment]);
+            handleScheduleAppointment(scheduleData);
           }}
           onEditEvent={(event) => {
             // Find and edit the appointment
@@ -539,30 +997,192 @@ const PatientDashboard = () => {
               handleAppointmentClick(appointment);
             }
           }}
-          onDeleteEvent={(eventId) => {
-            setAppointments(prev => prev.filter(apt => apt.id !== eventId));
+          onDeleteEvent={async (eventId) => {
+            try {
+              console.log('🗑️ Deleting appointment:', eventId);
+              setIsDeleting(true);
+              
+              // Check if it's a consultation (has UUID format)
+              const isConsultation = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(eventId);
+              console.log('Is consultation:', isConsultation, 'EventId:', eventId, 'EventId type:', typeof eventId);
+              
+              // Try to delete from Supabase regardless of ID format
+              console.log('🔍 Attempting to delete from Supabase...');
+              
+              // First, check if the consultation exists
+              console.log('🔍 Checking if consultation exists...');
+              const { data: existingConsultation, error: fetchError } = await supabase
+                .from('consultations')
+                .select('id, patient_id, doctor_id, reason, consent_id')
+                .eq('id', eventId)
+                .single();
+              
+              if (fetchError) {
+                console.error('❌ Error fetching consultation:', fetchError);
+                // If it's a "not found" error, it might not be a consultation
+                if (fetchError.code === 'PGRST116') {
+                  console.log('ℹ️ Not a consultation or already deleted, removing from local state only');
+                } else {
+                  alert(`Failed to fetch consultation: ${fetchError.message}`);
+                  setIsDeleting(false);
+                  return;
+                }
+              } else if (existingConsultation) {
+                console.log('✅ Consultation found:', existingConsultation);
+                
+                // Delete from Supabase
+                console.log('🗑️ Deleting from Supabase...');
+                
+                // First, try to set consent_id to NULL to avoid constraint issues
+                if (existingConsultation.consent_id) {
+                  console.log('🔧 Setting consent_id to NULL before deletion...');
+                  const { error: updateError } = await supabase
+                    .from('consultations')
+                    .update({ consent_id: null })
+                    .eq('id', eventId);
+                  
+                  if (updateError) {
+                    console.warn('⚠️ Warning: Could not set consent_id to NULL:', updateError);
+                  } else {
+                    console.log('✅ consent_id set to NULL');
+                  }
+                }
+                
+                const { data, error } = await supabase
+                  .from('consultations')
+                  .delete()
+                  .eq('id', eventId)
+                  .select();
+                
+                if (error) {
+                  console.error('❌ Error deleting consultation:', error);
+                  alert(`Failed to delete consultation: ${error.message}`);
+                  setIsDeleting(false);
+                  return;
+                }
+                
+                console.log('✅ Consultation deleted from Supabase:', data);
+                
+                // Verify deletion
+                const { data: verifyData, error: verifyError } = await supabase
+                  .from('consultations')
+                  .select('id')
+                  .eq('id', eventId);
+                
+                if (verifyError) {
+                  console.error('❌ Error verifying deletion:', verifyError);
+                } else {
+                  console.log('🔍 Verification after deletion:', verifyData);
+                  if (verifyData && verifyData.length === 0) {
+                    console.log('✅ Deletion verified - consultation no longer exists');
+                  } else {
+                    console.log('⚠️ Deletion verification failed - consultation still exists');
+                  }
+                }
+                
+                // Clear cache to ensure fresh data on next load
+                const cacheKey = createCacheKey('patient-appointments', user?.id || '');
+                cacheService.delete(cacheKey);
+                console.log('🗑️ Cleared appointment cache');
+                
+                // Show success message
+                alert('Consultation deleted successfully!');
+              } else {
+                console.log('ℹ️ No consultation found with this ID, removing from local state only');
+              }
+              
+              // Remove from local state
+              setAppointments(prev => prev.filter(apt => apt.id !== eventId));
+              console.log('✅ Appointment deleted successfully from local state');
+            } catch (error) {
+              console.error('❌ Error deleting appointment:', error);
+              alert(`Failed to delete appointment: ${error.message}`);
+            } finally {
+              setIsDeleting(false);
+            }
           }}
-          onMoveEvent={(eventId, newStart, newEnd) => {
+          onMoveEvent={async (eventId, newStart, newEnd) => {
+            try {
+              console.log('🔄 Moving appointment:', eventId, newStart, newEnd);
+              
+              // Check if it's a consultation (has UUID format)
+              const isConsultation = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(eventId);
+              
+              if (isConsultation) {
+                // Calculate new end time based on duration
+                const duration = Math.round((newEnd.getTime() - newStart.getTime()) / (1000 * 60));
+                const newEndTime = format(newEnd, 'HH:mm');
+                
+                // Update in Supabase
+                const { data, error } = await supabase
+                  .from('consultations')
+                  .update({
+                    consultation_date: format(newStart, 'yyyy-MM-dd'),
+                    consultation_time: format(newStart, 'HH:mm'),
+                    end_time: newEndTime,
+                    duration_minutes: duration
+                  })
+                  .eq('id', eventId)
+                  .select();
+                
+                if (error) {
+                  console.error('❌ Error moving consultation:', error);
+                  alert(`Failed to move consultation: ${error.message}`);
+                  return;
+                }
+                
+                console.log('✅ Consultation moved in Supabase:', data);
+              }
+              
+              // Update local state
             setAppointments(prev => prev.map(apt => 
               apt.id === eventId 
                 ? { ...apt, start: newStart, end: newEnd }
                 : apt
             ));
+              
+              console.log('✅ Appointment moved successfully');
+            } catch (error) {
+              console.error('❌ Error moving appointment:', error);
+              alert(`Failed to move appointment: ${error.message}`);
+            }
           }}
-          onResizeEvent={(eventId, newEnd) => {
+          onResizeEvent={async (eventId, newEnd) => {
+            try {
+              // Check if it's a consultation (has UUID format)
+              const isConsultation = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(eventId);
+              
+              if (isConsultation) {
+                // For consultations, we can't really resize the duration in Supabase
+                // as it's fixed at 30 minutes, but we can update the local state
+                console.log('Note: Consultation duration is fixed at 30 minutes');
+              }
+              
+              // Update local state
             setAppointments(prev => prev.map(apt => 
               apt.id === eventId 
                 ? { ...apt, end: newEnd }
                 : apt
             ));
+              
+              console.log('✅ Appointment resized successfully');
+            } catch (error) {
+              console.error('Error resizing appointment:', error);
+            }
           }}
           onSchedule={handleScheduleAppointment}
           onUpdate={handleUpdateAppointment}
           isPatientView={true}
           doctors={doctors}
           testCenters={testCenters}
+          onSlotClick={(timeSlot) => {
+            // Set the selected date and open the scheduling modal
+            setSelectedDate(timeSlot);
+            setIsSchedulingModalOpen(true);
+          }}
         />
       )}
+
     </div>
   );
 };
