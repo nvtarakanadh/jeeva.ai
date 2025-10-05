@@ -7,7 +7,7 @@ export interface CalendarEvent {
   title: string;
   start: Date;
   end: Date;
-  type: 'consultation' | 'operation' | 'meeting' | 'available';
+  type: 'consultation' | 'operation' | 'meeting' | 'available' | 'blocked' | 'followup' | 'reminder';
   patientName?: string;
   notes?: string;
   status?: 'pending' | 'confirmed' | 'cancelled';
@@ -33,8 +33,6 @@ export class ScheduleService {
           doctor_id,
           consultation_date,
           consultation_time,
-          end_time,
-          duration_minutes,
           reason,
           notes,
           status,
@@ -59,28 +57,52 @@ export class ScheduleService {
         const startTime = new Date(consultationDate);
         startTime.setHours(hours, minutes, 0, 0);
         
-        // Use end_time from database if available, otherwise calculate from duration
-        let endTime: Date;
-        if (consultation.end_time) {
-          const [endHours, endMinutes] = consultation.end_time.split(':').map(Number);
-          endTime = new Date(consultationDate);
-          endTime.setHours(endHours, endMinutes, 0, 0);
-        } else {
-          // Fallback to calculating from duration
-          const duration = consultation.duration_minutes || 30;
-          endTime = new Date(startTime.getTime() + duration * 60000);
-        }
+      // Calculate end time (default 30 minutes since duration columns don't exist yet)
+      const endTime = new Date(startTime.getTime() + 30 * 60000);
 
-        const patientName = consultation.profiles?.full_name || 'Unknown Patient';
+        const patientName = consultation.profiles?.full_name || '';
+        
+        // Determine event type based on patient_id and status
+        let eventType: 'consultation' | 'blocked' | 'followup' | 'meeting' | 'reminder' = 'consultation';
+        let title = consultation.reason;
+        
+        if (!consultation.patient_id) {
+          // No patient means it's a non-consultation event
+          if (consultation.status === 'cancelled') {
+            eventType = 'blocked';
+          } else {
+            // Try to determine type from reason
+            const reason = consultation.reason?.toLowerCase() || '';
+            if (reason.includes('meeting')) {
+              eventType = 'meeting';
+            } else if (reason.includes('reminder')) {
+              eventType = 'reminder';
+            } else if (reason.includes('follow') || reason.includes('followup')) {
+              eventType = 'followup';
+            } else {
+              eventType = 'blocked';
+            }
+          }
+        } else {
+          // Has patient - determine if it's consultation or followup
+          const reason = consultation.reason?.toLowerCase() || '';
+          if (reason.includes('follow') || reason.includes('followup')) {
+            eventType = 'followup';
+            title = `Follow-up - ${patientName}`;
+          } else {
+            eventType = 'consultation';
+            title = `Consultation - ${patientName}`;
+          }
+        }
         
         return {
           id: consultation.id,
-          title: `Consultation - ${patientName}`,
+          title: title,
           start: startTime,
           end: endTime,
-          type: 'consultation',
+          type: eventType,
           patientName: patientName,
-          notes: consultation.notes || consultation.reason,
+          notes: consultation.notes,
           status: consultation.status === 'scheduled' ? 'pending' : 
                   consultation.status === 'confirmed' ? 'confirmed' : 
                   consultation.status === 'cancelled' ? 'cancelled' : 'pending',
@@ -135,8 +157,8 @@ export class ScheduleService {
         const startTime = new Date(consultationDate);
         startTime.setHours(hours, minutes, 0, 0);
         
-        const endTime = new Date(startTime);
-        endTime.setMinutes(endTime.getMinutes() + 30);
+      // Calculate end time (default 30 minutes since duration columns don't exist yet)
+      const endTime = new Date(startTime.getTime() + 30 * 60000);
 
         return {
           id: consultation.id,
@@ -163,12 +185,14 @@ export class ScheduleService {
    * Create a new consultation event
    */
   static async createConsultation(consultationData: {
-    patientId: string;
+    patientId: string | null;
     doctorId: string;
     consultationDate: string;
     consultationTime: string;
     reason: string;
     notes?: string;
+    status?: string;
+    durationMinutes?: number;
   }): Promise<CalendarEvent | null> {
     try {
       console.log('Creating consultation with data:', consultationData);
@@ -176,13 +200,13 @@ export class ScheduleService {
       const { data, error } = await supabase
         .from('consultations')
         .insert([{
-          patient_id: consultationData.patientId,
+          patient_id: consultationData.patientId, // Can be null now
           doctor_id: consultationData.doctorId,
           consultation_date: consultationData.consultationDate,
           consultation_time: consultationData.consultationTime,
           reason: consultationData.reason,
           notes: consultationData.notes,
-          status: 'scheduled'
+          status: (consultationData.status as any) || 'scheduled'
         }])
         .select(`
           id,
@@ -215,8 +239,18 @@ export class ScheduleService {
       const startTime = new Date(consultationDate);
       startTime.setHours(hours, minutes, 0, 0);
       
-      const endTime = new Date(startTime);
-      endTime.setMinutes(endTime.getMinutes() + 30);
+      // Calculate end time using database values
+      let endTime: Date;
+      if ((data as any).end_time) {
+        // Use end_time from database if available
+        const [endHours, endMinutes] = (data as any).end_time.split(':').map(Number);
+        endTime = new Date(consultationDate);
+        endTime.setHours(endHours, endMinutes, 0, 0);
+      } else {
+        // Fallback to calculating from duration_minutes
+        const duration = (data as any).duration_minutes || 30;
+        endTime = new Date(startTime.getTime() + duration * 60000);
+      }
 
       const patientName = data.profiles?.full_name || 'Unknown Patient';
       
@@ -305,8 +339,18 @@ export class ScheduleService {
       const startTime = new Date(consultationDate);
       startTime.setHours(hours, minutes, 0, 0);
       
-      const endTime = new Date(startTime);
-      endTime.setMinutes(endTime.getMinutes() + 30);
+      // Calculate end time using database values
+      let endTime: Date;
+      if ((data as any).end_time) {
+        // Use end_time from database if available
+        const [endHours, endMinutes] = (data as any).end_time.split(':').map(Number);
+        endTime = new Date(consultationDate);
+        endTime.setHours(endHours, endMinutes, 0, 0);
+      } else {
+        // Fallback to calculating from duration_minutes
+        const duration = (data as any).duration_minutes || 30;
+        endTime = new Date(startTime.getTime() + duration * 60000);
+      }
 
       const patientName = data.profiles?.full_name || 'Unknown Patient';
       

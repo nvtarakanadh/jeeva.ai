@@ -1,13 +1,13 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import EnhancedSchedulingModal from './EnhancedSchedulingModal';
+import DoctorSchedulingModal from './DoctorSchedulingModal';
 import PatientSchedulingModal from './PatientSchedulingModal';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { 
   Clock, 
-  Plus,
+  Plus, 
   User, 
   Stethoscope, 
   Briefcase, 
@@ -47,6 +47,7 @@ interface DayViewModalProps {
   onClose: () => void;
   selectedDate: Date;
   events: DayViewEvent[];
+  existingAppointments?: any[]; // Original appointments for blocking logic
   onScheduleEvent: (timeSlot: Date, duration: number, eventData?: {
     title: string;
     type: 'consultation' | 'meeting';
@@ -72,6 +73,7 @@ const DayViewModal: React.FC<DayViewModalProps> = ({
   onClose,
   selectedDate,
   events,
+  existingAppointments = [],
   onScheduleEvent,
   onEditEvent,
   onDeleteEvent,
@@ -91,8 +93,6 @@ const DayViewModal: React.FC<DayViewModalProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<Date | null>(null);
-  const [isSchedulingModalOpen, setIsSchedulingModalOpen] = useState(false);
-  const [editingEvent, setEditingEvent] = useState<DayViewEvent | null>(null);
 
   // Check if mobile
   useEffect(() => {
@@ -178,72 +178,15 @@ const DayViewModal: React.FC<DayViewModalProps> = ({
     console.log('🎯 Slot clicked:', slotTime);
     setSelectedSlot(slotTime);
     
-    // Call the parent callback if provided
+    // Call the parent callback to open the standalone scheduling modal
     if (onSlotClick) {
       onSlotClick(slotTime);
-    } else {
-      // Fallback to the old behavior
-      // Create a temporary event with the selected time for pre-filling
-      const tempEvent = {
-        id: 'temp-slot',
-        title: 'New Event', // Give it a title so it's treated as editing
-        start: slotTime,
-        end: new Date(slotTime.getTime() + 30 * 60000), // 30 minutes default
-        event_type: 'consultation' as const,
-        appointment_type: 'consultation' as const, // For patient modal
-        status: 'pending' as const,
-        patient_name: '',
-        doctor_name: '',
-        notes: '',
-        doctor_id: '',
-        patient_id: '',
-        test_center_id: '', // For patient modal
-        is_available: true
-      };
-      
-      console.log('🎯 Setting editingEvent:', tempEvent);
-      setEditingEvent(tempEvent);
-      console.log('🎯 Setting isSchedulingModalOpen to true');
-      setIsSchedulingModalOpen(true);
     }
   }, [onSlotClick]);
 
 
-  const handleScheduleModalClose = useCallback(() => {
-    setIsSchedulingModalOpen(false);
-    setSelectedSlot(null);
-    setEditingEvent(null);
-  }, []);
 
-  const handleSchedule = useCallback((data: any) => {
-    if (onSchedule) {
-      // If this is a temporary event, treat it as a new schedule
-      if (editingEvent?.id === 'temp-slot') {
-        onSchedule(data);
-      } else {
-        onSchedule(data);
-      }
-    } else if (onScheduleEvent && selectedSlot) {
-      // Fallback to the original onScheduleEvent
-      onScheduleEvent(selectedSlot, data.duration || 30, {
-        title: data.title,
-        type: data.type || data.event_type || 'consultation',
-        notes: data.notes
-      });
-    }
-    handleScheduleModalClose();
-  }, [onSchedule, onScheduleEvent, selectedSlot, editingEvent, handleScheduleModalClose]);
 
-  const handleUpdate = useCallback((data: any) => {
-    if (onUpdate) {
-      if (editingEvent) {
-        onUpdate(editingEvent.id, data);
-      } else {
-        onUpdate('', data);
-      }
-    }
-    handleScheduleModalClose();
-  }, [onUpdate, editingEvent, handleScheduleModalClose]);
 
   const handleEventClick = useCallback((event: DayViewEvent, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -340,9 +283,9 @@ const DayViewModal: React.FC<DayViewModalProps> = ({
                                 <div className="flex items-center gap-2">
                                   {getEventIcon(event.event_type, event.status)}
                                   <div>
-                                    <span className="text-sm font-semibold">
-                                      {event.title}
-                                    </span>
+                                  <span className="text-sm font-semibold">
+                                    {event.title}
+                                  </span>
                                     <div className="text-xs text-gray-600 mt-1">
                                       {format(event.start, 'h:mm a')} – {format(event.end, 'h:mm a')}
                                     </div>
@@ -445,8 +388,8 @@ const DayViewModal: React.FC<DayViewModalProps> = ({
                                   {getEventIcon(event.event_type, event.status)}
                                   <div className="min-w-0 flex-1">
                                     <span className="text-xs font-semibold truncate block">
-                                      {event.title}
-                                    </span>
+                                    {event.title}
+                                  </span>
                                     <span className="text-xs text-gray-600 truncate block">
                                       {format(event.start, 'h:mm')} – {format(event.end, 'h:mm')}
                                     </span>
@@ -480,44 +423,6 @@ const DayViewModal: React.FC<DayViewModalProps> = ({
           )}
         </div>
 
-        {/* Scheduling Modal */}
-        {isPatientView ? (
-          <PatientSchedulingModal
-            isOpen={isSchedulingModalOpen}
-            onClose={handleScheduleModalClose}
-            selectedDate={selectedSlot || selectedDate}
-            onSchedule={handleSchedule}
-            onUpdate={handleUpdate}
-            editingAppointment={editingEvent as any}
-            doctors={doctors}
-            testCenters={testCenters}
-            asDialog={false}
-            existingAppointments={events.map(event => ({
-              id: event.id,
-              title: event.title,
-              start: event.start,
-              end: event.end,
-              appointment_type: event.event_type === 'consultation' ? 'consultation' : 'other',
-              status: event.status as 'pending' | 'confirmed' | 'cancelled' | 'scheduled',
-              doctor_name: event.patient_name,
-              notes: event.notes,
-              patient_id: event.patient_id || '',
-              doctor_id: event.doctor_id
-            }))}
-          />
-        ) : (
-          <EnhancedSchedulingModal
-            isOpen={isSchedulingModalOpen}
-            onClose={handleScheduleModalClose}
-            selectedDate={selectedSlot || selectedDate}
-            patients={patients}
-            onSchedule={handleSchedule}
-            onUpdate={handleUpdate}
-            editingEvent={editingEvent}
-            isPatientView={isPatientView}
-            doctorName={doctorName}
-          />
-        )}
       </DialogContent>
     </Dialog>
   );

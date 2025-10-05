@@ -197,9 +197,9 @@ const DoctorDashboard = () => {
   };
 
   const handleEditEvent = (calendarEvent: any) => {
-    console.log('Edit event:', calendarEvent);
-    console.log('Available patients:', patients);
-    console.log('Event patient ID:', calendarEvent.patient_id);
+    console.log('🔍 Edit event called with:', calendarEvent);
+    console.log('🔍 Available patients:', patients);
+    console.log('🔍 Event patient ID:', calendarEvent.patient_id);
     
     // Convert EnhancedCalendarComponent.CalendarEvent to scheduleService.CalendarEvent
     const event: CalendarEvent = {
@@ -215,11 +215,16 @@ const DoctorDashboard = () => {
       patientId: calendarEvent.patient_id
     };
     
+    console.log('🔍 Converted event:', event);
+    console.log('🔍 Setting editingEvent to:', event);
+    
     // Close the details modal and open the schedule modal for editing
     setIsMeetingDetailsOpen(false);
     setSelectedEvent(null);
     setEditingEvent(event);
     setIsScheduleModalOpen(true);
+    
+    console.log('🔍 Modal should be open now, editingEvent set to:', event);
   };
 
   const handleDeleteEvent = async (event: CalendarEvent) => {
@@ -561,95 +566,37 @@ const DoctorDashboard = () => {
       const endDateTime = new Date(startDateTime.getTime() + scheduleData.duration * 60 * 1000);
       const selectedPatient = patients.find(p => p.id === scheduleData.patientId);
       
-      // Try to create in events table first
-      if (scheduleData.event_type === 'consultation' && scheduleData.patientId) {
-        try {
-          const eventData: CreateEventData = {
-            title: scheduleData.title,
-            start_time: startDateTime.toISOString(),
-            end_time: endDateTime.toISOString(),
-            event_type: 'consultation',
-            status: scheduleData.status || 'confirmed',
-            doctor_id: doctorProfileId,
-            patient_id: scheduleData.patientId,
-            notes: scheduleData.notes,
-            is_available: false
-          };
-
-          const newEvent = await EventService.createEvent(eventData);
-          
-          if (newEvent) {
-            // Convert to CalendarEvent format
-            const calendarEvent: CalendarEvent = {
-              id: newEvent.id,
-              title: newEvent.title,
-              start: new Date(newEvent.start_time),
-              end: new Date(newEvent.end_time),
-              type: newEvent.event_type as any,
-              patientName: newEvent.patient_name || '',
-              notes: newEvent.notes,
-              status: newEvent.status as any,
-              doctorId: newEvent.doctor_id,
-              patientId: newEvent.patient_id
-            };
-            
-            // Add to events array
-            setEvents(prev => [...prev, calendarEvent]);
-            setCalendarKey(prev => prev + 1);
-            
-            // Close modal
-            setIsScheduleModalOpen(false);
-            
-            alert(`Event "${newEvent.title}" created successfully!`);
-            return;
-          }
-        } catch (error) {
-          console.log('Events table not available, using consultations table');
-        }
-        
-        // Fallback to consultations table
-        const consultationData = {
-          patientId: scheduleData.patientId,
-          doctorId: doctorProfileId,
-          consultationDate: scheduleData.date,
-          consultationTime: scheduleData.time,
-          reason: scheduleData.title,
-          notes: scheduleData.notes,
-        };
-        
-        const newEvent = await ScheduleService.createConsultation(consultationData);
-        if (newEvent) {
-          setEvents(prev => [...prev, newEvent]);
-          setCalendarKey(prev => prev + 1);
-          setIsScheduleModalOpen(false);
-          alert(`Consultation "${newEvent.title}" created successfully!`);
-          return;
-        }
+      // Validate patient requirement for consultation and follow-up events
+      if ((scheduleData.event_type === 'consultation' || scheduleData.event_type === 'followup') && !scheduleData.patientId) {
+        alert('Please select a patient for consultation or follow-up events.');
+        return;
       }
       
-      // For non-consultation events or if all else fails, create local event
-      console.log('Creating local event as fallback');
-      const localEvent: CalendarEvent = {
-        id: `local-${Date.now()}`,
-        title: scheduleData.title,
-        start: startDateTime,
-        end: endDateTime,
-        type: scheduleData.event_type as any,
-        patientName: selectedPatient?.name || '',
-        notes: scheduleData.notes,
-        status: scheduleData.status as any,
+      // Save all event types to Supabase consultations table
+      // patient_id can now be null for non-consultation events
+      const consultationData = {
+        patientId: scheduleData.patientId || null, // Can be null for blocked time, meetings, etc.
         doctorId: doctorProfileId,
-        patientId: scheduleData.patientId
+        consultationDate: scheduleData.date,
+        consultationTime: scheduleData.time,
+        reason: scheduleData.title,
+        notes: scheduleData.notes,
+        status: scheduleData.event_type === 'blocked' ? 'cancelled' : 'scheduled',
+        durationMinutes: scheduleData.duration
       };
       
-      // Add to events array
-      setEvents(prev => [...prev, localEvent]);
-      setCalendarKey(prev => prev + 1);
+      const newEvent = await ScheduleService.createConsultation(consultationData);
+      if (newEvent) {
+        setEvents(prev => [...prev, newEvent]);
+        setCalendarKey(prev => prev + 1);
+        setIsScheduleModalOpen(false);
+        alert(`${scheduleData.event_type === 'consultation' ? 'Consultation' : 'Event'} "${newEvent.title}" created successfully!`);
+        return;
+      }
       
-      // Close modal
-      setIsScheduleModalOpen(false);
-      
-      alert(`Event "${scheduleData.title}" created successfully!`);
+      // If we reach here, something went wrong
+      console.error('Failed to create event');
+      alert('Failed to create event. Please try again.');
     } catch (error) {
       console.error('Error creating schedule:', error);
       alert('Error creating event. Please try again.');
@@ -806,6 +753,37 @@ const DoctorDashboard = () => {
     }
   };
 
+  // Debug functions
+  React.useEffect(() => {
+    (window as any).debugDoctorDashboard = {
+      events,
+      editingEvent,
+      isScheduleModalOpen,
+      selectedDate,
+      patients,
+      testEditEvent: () => {
+        console.log('🧪 Testing edit event functionality...');
+        console.log('Current events:', events);
+        console.log('Current editingEvent:', editingEvent);
+        console.log('Is modal open:', isScheduleModalOpen);
+        console.log('Selected date:', selectedDate);
+        console.log('Available patients:', patients);
+        return { events, editingEvent, isScheduleModalOpen, selectedDate, patients };
+      },
+      simulateEditEvent: () => {
+        console.log('🧪 Simulating edit event...');
+        if (events.length > 0) {
+          const firstEvent = events[0];
+          console.log('🧪 Using first event for simulation:', firstEvent);
+          handleEditEvent(firstEvent);
+        } else {
+          console.log('❌ No events available for simulation');
+        }
+      }
+    };
+    console.log('🔧 Debug functions available: window.debugDoctorDashboard');
+  }, [events, editingEvent, isScheduleModalOpen, selectedDate, patients]);
+
   if (loading) {
     return <PageSkeleton />;
   }
@@ -914,6 +892,7 @@ const DoctorDashboard = () => {
       <DoctorSchedulingModal
         isOpen={isScheduleModalOpen}
         onClose={() => {
+          console.log('🔍 Modal closing, clearing editingEvent');
           setIsScheduleModalOpen(false);
           setEditingEvent(null);
         }}
@@ -1017,6 +996,22 @@ const DoctorDashboard = () => {
           onUpdate={handleUpdateEvent}
           isPatientView={false}
           doctorName={user?.name}
+          onSlotClick={(slotTime) => {
+            // Open the standalone DoctorSchedulingModal with pre-filled time
+            setSelectedDate(slotTime);
+            setEditingEvent({
+              id: 'temp-slot',
+              title: '',
+              start: slotTime,
+              end: new Date(slotTime.getTime() + 30 * 60000),
+              type: 'consultation',
+              status: 'pending',
+              notes: '',
+              doctorId: user?.id || '',
+              patientId: ''
+            });
+            setIsScheduleModalOpen(true);
+          }}
         />
       )}
     </div>

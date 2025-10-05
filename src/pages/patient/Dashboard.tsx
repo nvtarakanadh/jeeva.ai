@@ -250,6 +250,283 @@ const PatientDashboard = () => {
   console.log('- window.testDeletion(consultationId)');
   console.log('- window.listConsultations()');
   console.log('- window.testDeletionSimple(consultationId)');
+  
+  // Add function to create test appointment
+  (window as any).createTestAppointment = async (doctorId: string, date: string, time: string) => {
+    console.log('🧪 Creating test appointment...');
+    const testData: PatientScheduleData = {
+      title: 'Test Consultation',
+      appointment_type: 'consultation',
+      date: date,
+      time: time,
+      duration: 30,
+      doctor_id: doctorId,
+      test_center_id: '',
+      notes: 'Test appointment for debugging',
+      status: 'pending'
+    };
+    
+    try {
+      await handleScheduleAppointment(testData);
+      console.log('✅ Test appointment created successfully');
+    } catch (error) {
+      console.error('❌ Failed to create test appointment:', error);
+    }
+  };
+  
+  console.log('- window.createTestAppointment(doctorId, date, time) - Create test appointment');
+  
+  // Add function to open scheduling modal for testing
+  (window as any).openSchedulingModal = (date?: string) => {
+    const testDate = date ? new Date(date) : new Date();
+    console.log('🧪 Opening DayViewModal for date:', testDate);
+    setDayViewDate(testDate);
+    setIsDayViewOpen(true);
+  };
+  
+  console.log('- window.openSchedulingModal(date?) - Open scheduling modal for testing');
+  
+  // Add function to check and create test data
+  (window as any).setupTestData = async () => {
+    console.log('🧪 Setting up test data...');
+    
+    // First, list current consultations
+    console.log('📋 Current consultations:');
+    await (window as any).listConsultations();
+    
+    // Get doctors
+    console.log('👨‍⚕️ Available doctors:', doctors);
+    
+    if (doctors.length > 0) {
+      const firstDoctor = doctors[0];
+      const today = new Date().toISOString().split('T')[0];
+      console.log(`📅 Creating test appointment with doctor ${firstDoctor.name} (${firstDoctor.id}) for ${today} at 10:00`);
+      
+      // Create test appointment
+      await (window as any).createTestAppointment(firstDoctor.id, today, '10:00');
+      
+      // Wait a moment and then open the modal
+      setTimeout(() => {
+        console.log('🔍 Opening modal to test blocking...');
+        (window as any).openSchedulingModal(today);
+      }, 1000);
+    } else {
+      console.log('❌ No doctors available for testing');
+    }
+  };
+  
+  console.log('- window.setupTestData() - Create test appointment and open modal');
+  
+  // Add function to test Supabase connection
+  (window as any).testSupabaseConnection = async () => {
+    console.log('🔍 Testing Supabase connection...');
+    
+    try {
+      // Test 1: Check auth
+      console.log('🔍 Testing auth...');
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      console.log('✅ Auth test:', user ? `User logged in: ${user.email}` : 'No user', authError);
+      
+      // Test 2: Check profiles table
+      console.log('🔍 Testing profiles table...');
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, full_name, role')
+        .limit(5);
+      console.log('✅ Profiles test:', profiles?.length || 0, 'profiles found', profilesError);
+      if (profilesError) console.error('❌ Profiles error details:', profilesError);
+      
+      // Test 3: Check consultations table
+      console.log('🔍 Testing consultations table...');
+      const { data: consultations, error: consultationsError } = await supabase
+        .from('consultations')
+        .select('id, consultation_date, doctor_id, patient_id')
+        .limit(5);
+      console.log('✅ Consultations test:', consultations?.length || 0, 'consultations found', consultationsError);
+      if (consultationsError) console.error('❌ Consultations error details:', consultationsError);
+      
+      // Test 4: Check health_records table
+      console.log('🔍 Testing health_records table...');
+      const { data: healthRecords, error: healthRecordsError } = await supabase
+        .from('health_records')
+        .select('id, record_type, created_at')
+        .limit(5);
+      console.log('✅ Health records test:', healthRecords?.length || 0, 'health records found', healthRecordsError);
+      if (healthRecordsError) console.error('❌ Health records error details:', healthRecordsError);
+      
+      const result = {
+        auth: !authError,
+        profiles: !profilesError,
+        consultations: !consultationsError,
+        healthRecords: !healthRecordsError,
+        user: user?.email || 'No user',
+        profileCount: profiles?.length || 0,
+        consultationCount: consultations?.length || 0,
+        healthRecordCount: healthRecords?.length || 0
+      };
+      
+      console.log('🎯 Final test result:', result);
+      return result;
+    } catch (error) {
+      console.error('❌ Supabase connection test failed:', error);
+      return { error: error.message };
+    }
+  };
+  
+  console.log('- window.testSupabaseConnection() - Test Supabase connection');
+  
+  // Add a simpler test function
+  (window as any).quickTest = () => {
+    console.log('🔍 Quick Supabase test...');
+    console.log('Current user:', user);
+    console.log('Current appointments:', appointments.length);
+    console.log('Current doctors:', doctors.length);
+    console.log('Supabase client:', supabase);
+    
+    // Test a simple query
+    supabase.from('profiles').select('count').then(({ data, error }) => {
+      console.log('✅ Simple query test:', data, error);
+    });
+  };
+  
+  console.log('- window.quickTest() - Quick Supabase test');
+  
+  // Add function to inspect current appointments
+  (window as any).inspectAppointments = () => {
+    console.log('🔍 Inspecting current appointments...');
+    console.log('Total appointments:', appointments.length);
+    appointments.forEach((apt, index) => {
+      console.log(`Appointment ${index + 1}:`, {
+        id: apt.id,
+        title: apt.title,
+        start: apt.start,
+        end: apt.end,
+        doctor_id: apt.doctor_id,
+        doctor_name: apt.doctor_name,
+        appointment_type: apt.appointment_type,
+        status: apt.status
+      });
+    });
+    
+    // Also check what gets passed to DayViewModal
+    const dayViewEvents = convertToDayViewEvents(appointments);
+    console.log('DayViewEvents:', dayViewEvents);
+    
+    return appointments;
+  };
+  
+  console.log('- window.inspectAppointments() - Inspect current appointments');
+  
+  // Add function to test blocking logic
+  (window as any).testBlocking = (doctorId, date, time) => {
+    console.log('🧪 Testing blocking logic...');
+    console.log('Doctor ID:', doctorId);
+    console.log('Date:', date);
+    console.log('Time:', time);
+    console.log('Current appointments state:', appointments);
+    
+    // Convert appointments to the format expected by PatientSchedulingModal
+    const testAppointments = appointments.map(apt => ({
+      id: apt.id,
+      title: apt.title,
+      start: apt.start,
+      end: apt.end,
+      appointment_type: apt.appointment_type,
+      status: apt.status,
+      doctor_name: apt.doctor_name,
+      notes: apt.notes,
+      patient_id: apt.patient_id,
+      doctor_id: apt.doctor_id
+    }));
+    
+    console.log('Test appointments for blocking:', testAppointments);
+    
+    // Filter by doctor
+    const relevantAppointments = testAppointments.filter(apt => apt.doctor_id === doctorId);
+    console.log('Relevant appointments for doctor:', relevantAppointments);
+    
+    // Check if time slot would be blocked
+    const slotStart = new Date(`${date}T${time}`);
+    const slotEnd = new Date(slotStart.getTime() + (30 * 60000)); // 30 minutes
+    
+    const isBlocked = relevantAppointments.some(apt => {
+      const aptStart = new Date(apt.start);
+      const aptEnd = new Date(apt.end);
+      const overlaps = (slotStart < aptEnd && slotEnd > aptStart);
+      
+      if (overlaps) {
+        console.log('🚫 Slot blocked by appointment:', apt);
+      }
+      
+      return overlaps;
+    });
+    
+    console.log('Is slot blocked?', isBlocked);
+    return isBlocked;
+  };
+  
+  console.log('- window.testBlocking(doctorId, date, time) - Test blocking logic');
+  
+  // Add function to test with correct date
+  (window as any).testWithCorrectDate = () => {
+    console.log('🧪 Testing with correct date (October 5, 2025)...');
+    
+    const doctorId = '4e77d0cc-c61a-4aa1-9435-f294d8b29e4e';
+    const correctDate = '2025-10-05';
+    
+    // Test blocking for the actual appointment times
+    console.log('Testing 10:30 AM slot (should be blocked):');
+    (window as any).testBlocking(doctorId, correctDate, '10:30');
+    
+    console.log('Testing 11:30 AM slot (should be blocked):');
+    (window as any).testBlocking(doctorId, correctDate, '11:30');
+    
+    console.log('Testing 9:00 AM slot (should be available):');
+    (window as any).testBlocking(doctorId, correctDate, '09:00');
+    
+    // Open modal with correct date
+    console.log('Opening modal with correct date...');
+    (window as any).openSchedulingModal(correctDate);
+  };
+  
+  console.log('- window.testWithCorrectDate() - Test with correct date');
+  
+  // Add function to refresh appointments
+  (window as any).refreshAppointments = async () => {
+    console.log('🔄 Refreshing appointments...');
+    if (user?.id) {
+      try {
+        const freshAppointments = await getCachedAppointments(user.id);
+        console.log('✅ Fresh appointments loaded:', freshAppointments);
+        setAppointments(freshAppointments as PatientAppointment[]);
+        return freshAppointments;
+      } catch (error) {
+        console.error('❌ Error refreshing appointments:', error);
+        return [];
+      }
+    } else {
+      console.log('❌ No user ID available');
+      return [];
+    }
+  };
+  
+  console.log('- window.refreshAppointments() - Refresh appointments from database');
+  
+  // Add function to test blocking with fresh data
+  (window as any).testBlockingWithRefresh = async (doctorId, date, time) => {
+    console.log('🧪 Testing blocking with fresh data...');
+    
+    // First refresh appointments
+    const freshAppointments = await (window as any).refreshAppointments();
+    
+    // Wait a moment for state to update
+    setTimeout(() => {
+      console.log('🧪 Now testing blocking logic...');
+      (window as any).testBlocking(doctorId, date, time);
+    }, 1000);
+  };
+  
+  console.log('- window.testBlockingWithRefresh(doctorId, date, time) - Test blocking with fresh data');
 
   useEffect(() => {
     const loadDashboardData = async () => {
@@ -439,6 +716,54 @@ const PatientDashboard = () => {
     return data;
   };
 
+  // Function to get blocked time slots for a specific doctor
+  const getBlockedTimeSlots = async (doctorId: string, date: string) => {
+    try {
+      const { data: blockedConsultations, error } = await supabase
+        .from('consultations')
+        .select(`
+          id,
+          reason,
+          consultation_date,
+          consultation_time,
+          status,
+          doctor_id,
+          notes
+        `)
+        .eq('doctor_id', doctorId)
+        .eq('status', 'cancelled')
+        .eq('consultation_date', date)
+        .or('reason.ilike.%blocked%,reason.ilike.%unavailable%,reason.ilike.%lunch%');
+
+      if (error) {
+        console.error('Error fetching blocked time slots:', error);
+        return [];
+      }
+
+      // Convert consultations to blocked time slot format
+      const blockedSlots = (blockedConsultations || []).map(consultation => {
+        // Calculate end time (default 30 minutes if not specified)
+        const startTime = new Date(`${consultation.consultation_date}T${consultation.consultation_time}`);
+        const endTime = new Date(startTime.getTime() + 30 * 60000); // 30 minutes default
+        
+        return {
+          id: consultation.id,
+          title: consultation.reason || 'Blocked Time',
+          start_time: `${consultation.consultation_date}T${consultation.consultation_time}`,
+          end_time: endTime.toISOString(),
+          event_type: 'blocked',
+          doctor_id: consultation.doctor_id,
+          notes: consultation.notes
+        };
+      });
+
+      return blockedSlots;
+    } catch (error) {
+      console.error('Error in getBlockedTimeSlots:', error);
+      return [];
+    }
+  };
+
   const getCachedAppointments = async (userId: string) => {
     const cacheKey = createCacheKey('patient-appointments', userId);
     const cached = cacheService.get(cacheKey);
@@ -595,12 +920,12 @@ const PatientDashboard = () => {
 
   // Convert PatientAppointment to DayViewEvent format
   const convertToDayViewEvents = (appointments: PatientAppointment[]): DayViewEvent[] => {
-    return appointments.map(appointment => ({
+    const convertedEvents = appointments.map(appointment => ({
       id: appointment.id,
       title: appointment.title,
       start: appointment.start,
       end: appointment.end,
-      event_type: appointment.appointment_type === 'consultation' ? 'consultation' : 'meeting',
+      event_type: appointment.appointment_type === 'consultation' ? 'consultation' as const : 'meeting' as const,
       status: appointment.status === 'completed' ? 'confirmed' : appointment.status as 'pending' | 'confirmed' | 'cancelled' | 'rejected',
       patient_name: user?.name || 'Patient',
       notes: appointment.notes,
@@ -608,6 +933,13 @@ const PatientDashboard = () => {
       patient_id: appointment.patient_id,
       is_available: true
     }));
+    
+    console.log('🔍 Converting appointments to DayViewEvents:', {
+      originalAppointments: appointments,
+      convertedEvents: convertedEvents
+    });
+    
+    return convertedEvents;
   };
 
   const handleScheduleAppointment = async (data: PatientScheduleData) => {
@@ -964,6 +1296,7 @@ const PatientDashboard = () => {
         editingAppointment={editingAppointment}
         doctors={doctors}
         testCenters={testCenters}
+        existingAppointments={appointments}
       />
 
       {/* Day View Modal */}
@@ -976,6 +1309,7 @@ const PatientDashboard = () => {
           }}
           selectedDate={dayViewDate}
           events={convertToDayViewEvents(appointments)}
+          existingAppointments={appointments}
           onScheduleEvent={(timeSlot, duration, eventData) => {
             // Handle scheduling new events from day view - use the same logic as handleScheduleAppointment
             const scheduleData: PatientScheduleData = {
@@ -1092,7 +1426,7 @@ const PatientDashboard = () => {
               }
               
               // Remove from local state
-              setAppointments(prev => prev.filter(apt => apt.id !== eventId));
+            setAppointments(prev => prev.filter(apt => apt.id !== eventId));
               console.log('✅ Appointment deleted successfully from local state');
             } catch (error) {
               console.error('❌ Error deleting appointment:', error);
@@ -1175,9 +1509,22 @@ const PatientDashboard = () => {
           isPatientView={true}
           doctors={doctors}
           testCenters={testCenters}
-          onSlotClick={(timeSlot) => {
-            // Set the selected date and open the scheduling modal
-            setSelectedDate(timeSlot);
+          onSlotClick={(slotTime) => {
+            // Open the standalone PatientSchedulingModal with pre-filled time
+            setSelectedDate(slotTime);
+            setEditingAppointment({
+              id: 'temp-slot',
+              title: '',
+              start: slotTime,
+              end: new Date(slotTime.getTime() + 30 * 60000),
+              appointment_type: 'consultation',
+              status: 'pending',
+              doctor_name: '',
+              notes: '',
+              doctor_id: '',
+              patient_id: user?.id || '',
+              test_center_id: ''
+            });
             setIsSchedulingModalOpen(true);
           }}
         />
