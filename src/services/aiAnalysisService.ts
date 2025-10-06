@@ -26,8 +26,12 @@ export const analyzeHealthRecordWithAI = async (recordData: {
     console.log('🔑 OpenAI API Key:', openaiApiKey ? 'Found' : 'Not found');
     console.log('🔑 OpenAI Key preview:', openaiApiKey ? openaiApiKey.substring(0, 10) + '...' : 'None');
     
+<<<<<<< HEAD
     // Use OpenAI key if available, otherwise HF key
     const apiKey = openaiApiKey || hfApiKey;
+=======
+    // Fallback removed to avoid committing secrets
+>>>>>>> def0c59 (Remove hardcoded Groq API key; rely on env/window only. Quick Actions: Schedule opens modal; remove Consultations card.)
     
     if (!apiKey || apiKey === 'hf_your_api_key_here') {
       console.log('⚠️ No valid API key found, using fallback analysis');

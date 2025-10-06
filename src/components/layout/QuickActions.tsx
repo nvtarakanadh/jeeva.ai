@@ -41,14 +41,18 @@ const QuickActions = () => {
     },
     {
       id: 'schedule',
-      title: 'Schedule Consultation / Meeting',
+      title: 'Schedule',
       icon: Calendar,
       onClick: () => {
-        // This will be handled by the dashboard
-        const scheduleButton = document.querySelector('[data-schedule-button]');
-        if (scheduleButton) {
-          (scheduleButton as HTMLElement).click();
+        // Prefer opening via global function exposed by the dashboard
+        const opener = (window as any).openDoctorScheduleModal;
+        if (typeof opener === 'function') {
+          opener();
+          return;
         }
+        // Fallback: scroll to calendar area
+        const el = document.querySelector('[data-calendar-section]');
+        if (el) (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start' });
       },
       color: 'text-purple-600',
       bgColor: 'bg-purple-50 hover:bg-purple-100'

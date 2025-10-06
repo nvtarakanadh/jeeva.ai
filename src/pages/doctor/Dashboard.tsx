@@ -81,6 +81,19 @@ const DoctorDashboard = () => {
     getDoctorProfileId();
   }, [user]);
 
+  // Expose a global function so Quick Actions can open the schedule modal directly
+  useEffect(() => {
+    (window as any).openDoctorScheduleModal = () => {
+      const now = new Date();
+      setSelectedDate(now);
+      setEditingEvent(null);
+      setIsScheduleModalOpen(true);
+    };
+    return () => {
+      delete (window as any).openDoctorScheduleModal;
+    };
+  }, []);
+
   // Load events for calendar with memoization
   const loadEvents = useCallback(async () => {
     if (!doctorProfileId) return;
@@ -820,6 +833,7 @@ const DoctorDashboard = () => {
 
 
       {/* Enhanced Calendar Section */}
+      <div data-calendar-section>
       <Suspense fallback={<div className="animate-pulse bg-gray-200 h-96 rounded-lg"></div>}>
         {loading || isDataLoading ? (
           <CalendarSkeleton />
@@ -855,6 +869,7 @@ const DoctorDashboard = () => {
           />
         )}
       </Suspense>
+      </div>
 
       {/* Recent Activity */}
       <Card>

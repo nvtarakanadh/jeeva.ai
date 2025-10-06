@@ -68,6 +68,230 @@ export const HealthRecords = () => {
         description: error.message,
         variant: "destructive",
       });
+<<<<<<< HEAD
+=======
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Test function for debugging AI analysis
+  const testAIAnalysis = async () => {
+    console.log('🧪 Testing AI analysis...');
+    try {
+      const testData = {
+        title: 'Test Health Record',
+        recordType: 'prescription',
+        description: 'Test prescription for blood pressure medication',
+        serviceDate: new Date().toISOString().split('T')[0],
+      };
+      
+      console.log('🧪 Test data:', testData);
+      const result = await analyzeHealthRecordWithAI(testData);
+      console.log('🧪 Test AI result:', result);
+      return result;
+    } catch (error) {
+      console.error('🧪 Test AI error:', error);
+      console.error('🧪 Error details:', error.message);
+      console.error('🧪 Error stack:', error.stack);
+    }
+  };
+
+  // Make test function available globally for debugging
+  (window as any).testAIAnalysis = testAIAnalysis;
+  
+  // Add function to test AI analysis with a specific record
+  (window as any).testAIAnalysisForRecord = async (recordId: string) => {
+    console.log('🧪 Testing AI analysis for record:', recordId);
+    try {
+      // Get the record details
+      const { data: record, error: recordError } = await supabase
+        .from('health_records')
+        .select('*')
+        .eq('id', recordId)
+        .single();
+      
+      if (recordError) {
+        console.error('❌ Error fetching record:', recordError);
+        return;
+      }
+      
+      console.log('📋 Record found:', record);
+      
+      // Test AI analysis
+      const result = await triggerAIAnalysis(
+        record.id,
+        record.title,
+        record.record_type,
+        record.description || '',
+        record.file_url,
+        record.file_name
+      );
+      
+      console.log('✅ AI analysis test completed');
+      return result;
+    } catch (error) {
+      console.error('❌ AI analysis test failed:', error);
+    }
+  };
+
+  // Add function to check AI insights in database
+  (window as any).checkAIInsights = async () => {
+    console.log('🔍 Checking AI insights in database...');
+    try {
+      const { data: insights, error } = await supabase
+        .from('ai_insights')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      console.log('📊 AI insights found:', insights?.length || 0);
+      console.log('📋 Insights data:', insights);
+      if (error) console.error('❌ Error fetching insights:', error);
+      
+      return insights;
+    } catch (error) {
+      console.error('❌ Error checking insights:', error);
+    }
+  };
+
+  // Add function to check API keys
+  (window as any).checkAPIKeys = () => {
+    console.log('🔍 Checking API keys...');
+    const groqKey = import.meta.env.VITE_GROQ_API_KEY;
+    
+    console.log('🔑 Groq API Key:', groqKey ? 'Found (' + groqKey.substring(0, 10) + '...)' : 'Not found');
+    console.log('🔍 All env vars:', Object.keys(import.meta.env).filter(key => key.includes('GROQ')));
+    console.log('🔍 VITE_GROQ_API_KEY value:', import.meta.env.VITE_GROQ_API_KEY);
+    
+    return { groqKey: !!groqKey };
+  };
+
+  // Add function to manually set API key for testing
+  (window as any).setGroqAPIKey = (key: string) => {
+    console.log('🔧 Manually setting Groq API key...');
+    (window as any).GROQ_API_KEY = key;
+    console.log('✅ API key set:', key ? key.substring(0, 10) + '...' : 'None');
+  };
+
+  // Add function to test Groq API directly
+  (window as any).testGroqAPI = async () => {
+    console.log('🧪 Testing Groq API directly...');
+    try {
+      let groqKey = import.meta.env.VITE_GROQ_API_KEY;
+      
+      // Fallback to manually set key
+      if (!groqKey) {
+        groqKey = (window as any).GROQ_API_KEY;
+      }
+      
+      // Final fallback removed to avoid committing secrets.
+      
+      console.log('🔑 Using API key:', groqKey ? groqKey.substring(0, 10) + '...' : 'None');
+      
+      if (!groqKey) {
+        console.error('❌ No Groq API key found');
+        return;
+      }
+
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${groqKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages: [
+            {
+              role: 'user',
+              content: 'Hello, this is a test. Please respond with "Groq API is working!"'
+            }
+          ],
+          temperature: 0.3,
+          max_tokens: 100
+        })
+      });
+
+      if (!response.ok) {
+        console.error('❌ Groq API error:', response.status, response.statusText);
+        const errorText = await response.text();
+        console.error('❌ Error details:', errorText);
+        return;
+      }
+
+      const data = await response.json();
+      console.log('✅ Groq API test successful:', data);
+      return data;
+    } catch (error) {
+      console.error('❌ Groq API test failed:', error);
+    }
+  };
+
+  const triggerAIAnalysis = async (
+    recordId: string, 
+    title: string, 
+    recordType: string, 
+    description: string, 
+    fileUrl: string | null, 
+    fileName: string | null
+  ) => {
+    try {
+      console.log('🤖 Starting AI analysis for record:', recordId);
+      console.log('📋 Record data:', { title, recordType, description });
+      console.log('👤 User ID:', user?.id);
+      
+      // Prepare the health record data for AI analysis
+      const healthRecordData = {
+        title,
+        recordType: recordType,
+        description: description || '',
+        serviceDate: new Date().toISOString().split('T')[0], // Use current date as service date
+        fileUrl: fileUrl || undefined,
+        fileName: fileName || undefined
+      };
+
+      console.log('📤 Calling AI analysis service with data:', healthRecordData);
+
+      // Call the AI analysis service
+      const aiResult: AIAnalysisResult = await analyzeHealthRecordWithAI(healthRecordData);
+
+      console.log('✅ AI analysis completed:', aiResult);
+
+      // Save the analysis to the database
+      const insertData = {
+        record_id: recordId,
+        user_id: user?.id,
+        insight_type: aiResult.analysisType,
+        // Store full structured result as JSON string to render distinct sections later
+        content: JSON.stringify(aiResult),
+        confidence_score: aiResult.confidence,
+      };
+
+      console.log('💾 Saving to database:', insertData);
+      console.log('🔍 Record ID type:', typeof recordId);
+      console.log('🔍 User ID type:', typeof user?.id);
+
+      const { data: insertResult, error: saveError } = await supabase
+        .from('ai_insights')
+        .insert(insertData)
+        .select();
+
+      if (saveError) {
+        console.error('❌ Error saving AI analysis:', saveError);
+        console.error('❌ Error details:', saveError.message);
+        console.error('❌ Error code:', saveError.code);
+        console.error('❌ Error hint:', saveError.hint);
+        console.error('❌ Full error object:', JSON.stringify(saveError, null, 2));
+        // Don't show error to user as this is background processing
+      } else {
+        console.log('✅ AI analysis completed and saved successfully');
+        console.log('📊 Insert result:', insertResult);
+      }
+    } catch (error: any) {
+      console.error('❌ Error during AI analysis:', error);
+      console.error('❌ Error stack:', error.stack);
+      // Don't show error to user as this is background processing
+>>>>>>> def0c59 (Remove hardcoded Groq API key; rely on env/window only. Quick Actions: Schedule opens modal; remove Consultations card.)
     }
   };
 
