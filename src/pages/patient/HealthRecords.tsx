@@ -6,15 +6,20 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Upload, FileText, Image, Download, Brain, Search, Filter } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Upload, FileText, Image, Download, Brain, Search, Filter, Eye, Trash2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { HealthRecord, RecordType } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { analyzeHealthRecordWithAI, AIAnalysisResult } from '@/services/aiAnalysisService';
+import AIAnalysisModal from '@/components/ai/AIAnalysisModal';
 
 export const HealthRecords = () => {
   const { user, session } = useAuth();
   const [records, setRecords] = useState<HealthRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [uploadData, setUploadData] = useState({
     title: '',
     recordType: '' as RecordType | '',
@@ -26,25 +31,53 @@ export const HealthRecords = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<RecordType | 'all'>('all');
   const [isUploading, setIsUploading] = useState(false);
+  const [viewingFile, setViewingFile] = useState<{ url: string; name: string; type: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+  const [selectedRecordForAI, setSelectedRecordForAI] = useState<{
+    id: string;
+    title: string;
+    type: string;
+    description?: string;
+    fileUrl?: string;
+    fileName?: string;
+  } | null>(null);
 
   // Fetch health records on component mount
   useEffect(() => {
     if (user && session) {
+      console.log('🔄 HealthRecords component mounted, fetching records...');
       fetchHealthRecords();
+    } else {
+      console.log('⚠️ No user or session, skipping health records fetch');
+      setIsLoading(false);
     }
   }, [user, session]);
 
   const fetchHealthRecords = async () => {
-    if (!session) return;
+    if (!session) {
+      setIsLoading(false);
+      return;
+    }
 
     try {
+      setIsLoading(true);
+      setError(null);
+      
+      console.log('🔄 Fetching health records for user:', session.user.id);
+      
       const { data, error } = await supabase
         .from('health_records')
         .select('*')
         .eq('user_id', session.user.id)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Database error:', error);
+        throw error;
+      }
+
+      console.log('✅ Health records fetched:', data?.length || 0);
 
       const formattedRecords: any[] = data?.map(record => ({
         id: record.id,
@@ -62,14 +95,15 @@ export const HealthRecords = () => {
       })) || [];
 
       setRecords(formattedRecords);
+      console.log('✅ Records formatted and set:', formattedRecords.length);
     } catch (error: any) {
+      console.error('❌ Error fetching health records:', error);
+      setError(error.message || "Failed to load health records");
       toast({
         title: "Error loading records",
-        description: error.message,
+        description: error.message || "There was an error loading your health records.",
         variant: "destructive",
       });
-<<<<<<< HEAD
-=======
     } finally {
       setIsLoading(false);
     }
@@ -156,14 +190,14 @@ export const HealthRecords = () => {
 
   // Add function to check API keys
   (window as any).checkAPIKeys = () => {
-    console.log('🔍 Checking API keys...');
-    const groqKey = import.meta.env.VITE_GROQ_API_KEY;
+      console.log('🔍 Checking API keys...');
+      const groqKey = import.meta.env.VITE_GROQ_API_KEY || (window as any).GROQ_API_KEY;
     
     console.log('🔑 Groq API Key:', groqKey ? 'Found (' + groqKey.substring(0, 10) + '...)' : 'Not found');
     console.log('🔍 All env vars:', Object.keys(import.meta.env).filter(key => key.includes('GROQ')));
-    console.log('🔍 VITE_GROQ_API_KEY value:', import.meta.env.VITE_GROQ_API_KEY);
+      console.log('🔍 VITE_GROQ_API_KEY value:', import.meta.env.VITE_GROQ_API_KEY);
     
-    return { groqKey: !!groqKey };
+      return { groqKey: !!groqKey };
   };
 
   // Add function to manually set API key for testing
@@ -183,8 +217,6 @@ export const HealthRecords = () => {
       if (!groqKey) {
         groqKey = (window as any).GROQ_API_KEY;
       }
-      
-      // Final fallback removed to avoid committing secrets.
       
       console.log('🔑 Using API key:', groqKey ? groqKey.substring(0, 10) + '...' : 'None');
       
@@ -291,7 +323,6 @@ export const HealthRecords = () => {
       console.error('❌ Error during AI analysis:', error);
       console.error('❌ Error stack:', error.stack);
       // Don't show error to user as this is background processing
->>>>>>> def0c59 (Remove hardcoded Groq API key; rely on env/window only. Quick Actions: Schedule opens modal; remove Consultations card.)
     }
   };
 
@@ -386,10 +417,32 @@ export const HealthRecords = () => {
       });
       setSelectedFiles([]);
 
+      // Trigger AI analysis in the background
+      console.log('🚀 Starting AI analysis trigger for record:', data.id);
+      console.log('📋 Record data for AI:', {
+        id: data.id,
+        title: uploadData.title,
+        recordType: uploadData.recordType,
+        description: uploadData.description,
+        fileUrl,
+        fileName
+      });
+      
+      // Trigger AI analysis in the background
+      triggerAIAnalysis(data.id, uploadData.title, uploadData.recordType, uploadData.description, fileUrl, fileName);
+
       toast({
         title: "Upload successful",
-        description: "Your health record has been uploaded successfully.",
+        description: "Your health record has been uploaded successfully. AI analysis is being processed in the background.",
       });
+
+      // Show additional toast after a delay to inform about AI analysis
+      setTimeout(() => {
+        toast({
+          title: "AI Analysis Complete",
+          description: "AI analysis has been completed. Click the 'AI Analytics' button next to your record to view insights.",
+        });
+      }, 5000); // 5 seconds delay to allow AI analysis to complete
     } catch (error: any) {
       toast({
         title: "Upload failed",
@@ -425,8 +478,302 @@ export const HealthRecords = () => {
     return <FileText className="h-4 w-4" />;
   };
 
+  const getFileType = (fileName: string) => {
+    const extension = fileName?.split('.').pop()?.toLowerCase();
+    if (['pdf'].includes(extension || '')) return 'pdf';
+    if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(extension || '')) return 'image';
+    if (['doc', 'docx'].includes(extension || '')) return 'document';
+    return 'file';
+  };
+
+  const openFileViewer = async (fileUrl: string, fileName: string) => {
+    try {
+      const fileType = getFileType(fileName);
+      
+      // If it's already a full URL, use it directly
+      let displayUrl = fileUrl;
+      
+      // Check if it's a Supabase storage path and try different bucket names
+      if (fileUrl && !fileUrl.startsWith('http')) {
+        // Try different possible bucket names
+        const possibleBuckets = ['medical-files', 'prescriptions', 'consultation-notes', 'health-records', 'files'];
+        
+        for (const bucket of possibleBuckets) {
+          try {
+            const { data } = supabase.storage
+              .from(bucket)
+              .getPublicUrl(fileUrl);
+            
+            if (data.publicUrl) {
+              displayUrl = data.publicUrl;
+              break;
+            }
+          } catch (bucketError) {
+            // Continue to next bucket
+          }
+        }
+      }
+      
+      setViewingFile({ url: displayUrl, name: fileName, type: fileType });
+    } catch (error) {
+      // Still try to open with the original URL
+      const fileType = getFileType(fileName);
+      setViewingFile({ url: fileUrl, name: fileName, type: fileType });
+    }
+  };
+
+  const openAIModal = (record: HealthRecord) => {
+    setSelectedRecordForAI({
+      id: record.id,
+      title: record.title,
+      type: record.type,
+      description: record.description,
+      fileUrl: record.fileUrl,
+      fileName: record.fileName
+    });
+    setIsAIModalOpen(true);
+  };
+
+  const handleDeleteRecord = async (recordId: string) => {
+    if (!session) {
+      toast({
+        title: "Authentication required",
+        description: "Please log in to delete records.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    console.log('🗑️ Starting delete process for record:', recordId);
+    setIsDeleting(recordId);
+
+    try {
+      // First, get the record to find the file path
+      console.log('📋 Fetching record details...');
+      const { data: record, error: fetchError } = await supabase
+        .from('health_records')
+        .select('file_url, file_name')
+        .eq('id', recordId)
+        .eq('user_id', session.user.id)
+        .single();
+
+      console.log('📋 Record fetch result:', { record, fetchError });
+
+      if (fetchError) {
+        console.error('❌ Error fetching record:', fetchError);
+        throw fetchError;
+      }
+
+      if (!record) {
+        throw new Error('Record not found or you do not have permission to delete it');
+      }
+
+      // Delete the file from storage if it exists
+      if (record.file_url) {
+        console.log('📁 Deleting file from storage:', record.file_url);
+        try {
+          // Extract the file path from the URL or use the file_url directly
+          const filePath = record.file_url.includes('/') ? record.file_url.split('/').slice(-2).join('/') : record.file_url;
+          console.log('📁 Extracted file path:', filePath);
+          
+          // Try different possible bucket names
+          const possibleBuckets = ['medical-files', 'prescriptions', 'consultation-notes', 'health-records', 'files'];
+          
+          for (const bucket of possibleBuckets) {
+            try {
+              console.log(`📁 Trying bucket: ${bucket}`);
+              await supabase.storage
+                .from(bucket)
+                .remove([filePath]);
+              console.log(`✅ File deleted from bucket: ${bucket}`);
+              break; // If successful, break out of the loop
+            } catch (bucketError) {
+              console.log(`❌ Failed to delete from bucket ${bucket}:`, bucketError);
+              // Continue to next bucket
+            }
+          }
+        } catch (storageError) {
+          console.warn('⚠️ Could not delete file from storage:', storageError);
+          // Continue with database deletion even if storage deletion fails
+        }
+      } else {
+        console.log('ℹ️ No file to delete from storage');
+      }
+
+      // Delete the record from the database
+      console.log('🗑️ Deleting record from database...');
+      const { error: deleteError } = await supabase
+        .from('health_records')
+        .delete()
+        .eq('id', recordId)
+        .eq('user_id', session.user.id);
+
+      console.log('🗑️ Database delete result:', { deleteError });
+
+      if (deleteError) {
+        console.error('❌ Error deleting record from database:', deleteError);
+        throw deleteError;
+      }
+
+      console.log('✅ Record deleted successfully, refreshing records...');
+
+      // Refresh records
+      await fetchHealthRecords();
+
+      toast({
+        title: "Record deleted",
+        description: "Your health record has been deleted successfully.",
+      });
+    } catch (error: any) {
+      console.error('❌ Delete failed:', error);
+      toast({
+        title: "Delete failed",
+        description: error.message || "There was an error deleting your record.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(null);
+    }
+  };
+
+  const FileViewer = () => {
+    if (!viewingFile) return null;
+
+    return (
+      <Dialog open={!!viewingFile} onOpenChange={() => setViewingFile(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              {viewingFile.name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto">
+            {viewingFile.type === 'pdf' && (
+              <div className="w-full h-[70vh] border rounded-lg">
+                <iframe
+                  src={viewingFile.url}
+                  className="w-full h-full border-0 rounded-lg"
+                  title={viewingFile.name}
+                  onError={(e) => {
+                    console.error('Error loading PDF:', e);
+                  }}
+                />
+              </div>
+            )}
+            {viewingFile.type === 'image' && (
+              <div className="flex items-center justify-center h-[70vh] bg-gray-50 rounded-lg">
+                <div className="text-center">
+                  <img
+                    src={viewingFile.url}
+                    alt={viewingFile.name}
+                    className="max-w-full max-h-[60vh] object-contain mx-auto"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                  <div className="mt-4 space-y-2">
+                    <p className="text-sm text-gray-600">If image doesn't load, try these options:</p>
+                    <div className="flex gap-2 justify-center">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => window.open(viewingFile.url, '_blank')}
+                      >
+                        Open in New Tab
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => {
+                          const link = document.createElement('a');
+                          link.href = viewingFile.url;
+                          link.download = viewingFile.name;
+                          link.click();
+                        }}
+                      >
+                        Download
+                      </Button>
+                    </div>
+                    <p className="text-xs text-gray-500 break-all">
+                      URL: {viewingFile.url}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+            {viewingFile.type === 'document' && (
+              <div className="flex items-center justify-center h-[70vh] bg-gray-100 rounded-lg">
+                <div className="text-center">
+                  <FileText className="h-16 w-16 mx-auto text-gray-400 mb-4" />
+                  <p className="text-lg font-medium">Document Preview</p>
+                  <p className="text-sm text-gray-500 mb-4">{viewingFile.name}</p>
+                  <p className="text-sm text-gray-400 mb-4">
+                    Document preview not available in browser.
+                  </p>
+                  <Button 
+                    onClick={() => window.open(viewingFile.url, '_blank')}
+                    variant="outline"
+                  >
+                    Open in New Tab
+                  </Button>
+                </div>
+              </div>
+            )}
+            {viewingFile.type === 'file' && (
+              <div className="flex items-center justify-center h-[70vh] bg-gray-100 rounded-lg">
+                <div className="text-center">
+                  <FileText className="h-16 w-16 mx-auto text-gray-400 mb-4" />
+                  <p className="text-lg font-medium">File Preview</p>
+                  <p className="text-sm text-gray-500 mb-4">{viewingFile.name}</p>
+                  <p className="text-sm text-gray-400 mb-4">
+                    File preview not available in browser.
+                  </p>
+                  <Button 
+                    onClick={() => window.open(viewingFile.url, '_blank')}
+                    variant="outline"
+                  >
+                    Open in New Tab
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="flex justify-between items-center pt-4 border-t">
+            <p className="text-sm text-gray-500 truncate max-w-md">
+              URL: {viewingFile.url}
+            </p>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => window.open(viewingFile.url, '_blank')}
+              >
+                Open in New Tab
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => {
+                  const link = document.createElement('a');
+                  link.href = viewingFile.url;
+                  link.download = viewingFile.name;
+                  link.click();
+                }}
+              >
+                Download
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  };
+
   return (
     <div className="space-y-6">
+      {/* File Viewer Modal */}
+      <FileViewer />
       <div>
         <h1 className="text-3xl font-bold">Health Records</h1>
         <p className="text-muted-foreground">Upload, organize, and manage your medical documents</p>
@@ -577,7 +924,32 @@ export const HealthRecords = () => {
       {/* Records Timeline */}
       <div className="space-y-4">
         <h2 className="text-xl font-semibold">Your Health Timeline</h2>
-        {filteredRecords.length === 0 ? (
+        
+        {isLoading ? (
+          <Card>
+            <CardContent className="text-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-lg font-medium">Loading your health records...</p>
+              <p className="text-muted-foreground">Please wait while we fetch your data</p>
+            </CardContent>
+          </Card>
+        ) : error ? (
+          <Card>
+            <CardContent className="text-center py-12">
+              <div className="text-red-500 mb-4">
+                <FileText className="h-12 w-12 mx-auto mb-2" />
+                <p className="text-lg font-medium">Error loading records</p>
+                <p className="text-sm text-muted-foreground">{error}</p>
+              </div>
+              <Button 
+                onClick={fetchHealthRecords}
+                variant="outline"
+              >
+                Try Again
+              </Button>
+            </CardContent>
+          </Card>
+        ) : filteredRecords.length === 0 ? (
           <Card>
             <CardContent className="text-center py-12">
               <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
@@ -616,20 +988,43 @@ export const HealthRecords = () => {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {record.aiAnalysis && (
-                      <Button variant="outline" size="sm">
-                        <Brain className="h-4 w-4 mr-2" />
-                        View Analysis
-                      </Button>
-                    )}
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => openAIModal(record)}
+                    >
+                      <Brain className="h-4 w-4 mr-2" />
+                      AI Analytics
+                    </Button>
                     {record.fileUrl && (
-                      <Button variant="outline" size="sm" asChild>
-                        <a href={record.fileUrl} target="_blank" rel="noopener noreferrer">
-                          <Download className="h-4 w-4 mr-2" />
-                          Download
-                        </a>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => openFileViewer(record.fileUrl!, record.fileName || 'Unknown File')}
+                      >
+                        <Eye className="h-4 w-4 mr-2" />
+                        View File
                       </Button>
                     )}
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handleDeleteRecord(record.id)}
+                      disabled={isDeleting === record.id}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      {isDeleting === record.id ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600 mr-2"></div>
+                          Deleting...
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete
+                        </>
+                      )}
+                    </Button>
                   </div>
                 </div>
               </CardContent>
@@ -637,6 +1032,23 @@ export const HealthRecords = () => {
           ))
         )}
       </div>
+
+      {/* AI Analysis Modal */}
+      {selectedRecordForAI && (
+        <AIAnalysisModal
+          isOpen={isAIModalOpen}
+          onClose={() => {
+            setIsAIModalOpen(false);
+            setSelectedRecordForAI(null);
+          }}
+          recordId={selectedRecordForAI.id}
+          recordTitle={selectedRecordForAI.title}
+          recordType={selectedRecordForAI.type}
+          recordDescription={selectedRecordForAI.description}
+          fileUrl={selectedRecordForAI.fileUrl}
+          fileName={selectedRecordForAI.fileName}
+        />
+      )}
     </div>
   );
 };

@@ -18,6 +18,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 import { RecordType } from '@/types';
+import AIAnalysisModal from '@/components/ai/AIAnalysisModal';
 
 interface Patient {
   id: string;
@@ -83,6 +84,17 @@ const DoctorPatients = memo(() => {
     requestedDataTypes: [] as RecordType[]
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // AI Analysis Modal state
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+  const [selectedRecordForAI, setSelectedRecordForAI] = useState<{
+    id: string;
+    title: string;
+    type: string;
+    description?: string;
+    fileUrl?: string;
+    fileName?: string;
+  } | null>(null);
 
   // Debounce search term to prevent excessive re-renders
   useEffect(() => {
@@ -113,69 +125,88 @@ const DoctorPatients = memo(() => {
           return;
         }
         
-        // Get all profiles first
-        const { data: allProfiles, error: allError } = await supabase
+        // Get only patient profiles (more efficient)
+        const { data: patientProfiles, error: allError } = await supabase
           .from('profiles')
-          .select('*');
+          .select('*')
+          .in('role', ['patient']);
 
         if (allError) {
-          console.error('Error fetching profiles:', allError);
+          console.error('Error fetching patient profiles:', allError);
           setPatients([]);
           return;
         }
 
-        if (allProfiles && allProfiles.length > 0) {
-          // Filter for patients (exclude doctors)
-          const patientProfiles = allProfiles.filter(profile => 
-            profile.role !== 'doctor' && profile.role !== 'admin'
-          );
+        if (patientProfiles && patientProfiles.length > 0) {
+          console.log('Found patient profiles:', patientProfiles.length);
           
-          // Convert to Patient format and get record counts
-          const patientData: Patient[] = await Promise.all(
-            patientProfiles.map(async (profile, index) => {
-              // Get record count for this patient
-              let recordCount = 0;
-              try {
-                const { data: healthRecords } = await supabase
-                  .from('health_records')
-                  .select('id')
-                  .eq('user_id', profile.user_id);
-                
-                const { data: prescriptions } = await supabase
-                  .from('prescriptions')
-                  .select('id')
-                  .eq('patient_id', profile.id);
-                
-                const { data: consultationNotes } = await supabase
-                  .from('consultation_notes')
-                  .select('id')
-                  .eq('patient_id', profile.id);
-                
-                recordCount = (healthRecords?.length || 0) + 
-                             (prescriptions?.length || 0) + 
-                             (consultationNotes?.length || 0);
-              } catch (error) {
-                console.warn(`Error getting record count for patient ${profile.id}:`, error);
-              }
+          // Get all record counts in batch queries (much more efficient)
+          const patientIds = patientProfiles.map(p => p.id);
+          const patientUserIds = patientProfiles.map(p => p.user_id);
+          
+          // Batch query for health records
+          const { data: healthRecords } = await supabase
+            .from('health_records')
+            .select('user_id')
+            .in('user_id', patientUserIds);
+          
+          // Batch query for prescriptions
+          const { data: prescriptions } = await supabase
+            .from('prescriptions')
+            .select('patient_id')
+            .in('patient_id', patientIds);
+          
+          // Batch query for consultation notes
+          const { data: consultationNotes } = await supabase
+            .from('consultation_notes')
+            .select('patient_id')
+            .in('patient_id', patientIds);
+          
+          // Create record count maps for efficient lookup
+          const healthRecordCounts = new Map<string, number>();
+          const prescriptionCounts = new Map<string, number>();
+          const consultationCounts = new Map<string, number>();
+          
+          healthRecords?.forEach(record => {
+            const count = healthRecordCounts.get(record.user_id) || 0;
+            healthRecordCounts.set(record.user_id, count + 1);
+          });
+          
+          prescriptions?.forEach(prescription => {
+            const count = prescriptionCounts.get(prescription.patient_id) || 0;
+            prescriptionCounts.set(prescription.patient_id, count + 1);
+          });
+          
+          consultationNotes?.forEach(note => {
+            const count = consultationCounts.get(note.patient_id) || 0;
+            consultationCounts.set(note.patient_id, count + 1);
+          });
+          
+          // Convert to Patient format with pre-calculated counts
+          const patientData: Patient[] = patientProfiles.map(profile => {
+            const healthCount = healthRecordCounts.get(profile.user_id) || 0;
+            const prescriptionCount = prescriptionCounts.get(profile.id) || 0;
+            const consultationCount = consultationCounts.get(profile.id) || 0;
+            const recordCount = healthCount + prescriptionCount + consultationCount;
 
-              return {
-                id: profile.id, // Use the profile ID directly, not user_id
-                name: profile.full_name || 'Unknown Patient',
-                email: profile.email || '',
-                age: profile.date_of_birth ? 
-                  new Date().getFullYear() - new Date(profile.date_of_birth).getFullYear() : 25,
-                gender: profile.gender || 'Unknown',
-                lastVisit: new Date(profile.updated_at || profile.created_at || new Date()),
-                condition: 'General Checkup',
-                consentStatus: 'active' as const,
-                recordCount: recordCount
-              };
-            })
-          );
+            return {
+              id: profile.id,
+              name: profile.full_name || 'Unknown Patient',
+              email: profile.email || '',
+              age: profile.date_of_birth ? 
+                new Date().getFullYear() - new Date(profile.date_of_birth).getFullYear() : 25,
+              gender: profile.gender || 'Unknown',
+              lastVisit: new Date(profile.updated_at || profile.created_at || new Date()),
+              condition: 'General Checkup',
+              consentStatus: 'active' as const,
+              recordCount: recordCount
+            };
+          });
           
-          console.log('Loaded patients:', patientData.map(p => ({ id: p.id, name: p.name })));
+          console.log('Loaded patients:', patientData.map(p => ({ id: p.id, name: p.name, recordCount: p.recordCount })));
           setPatients(patientData);
         } else {
+          console.log('No patient profiles found');
           setPatients([]);
         }
       } catch (error) {
@@ -218,26 +249,30 @@ const DoctorPatients = memo(() => {
   const loadPatientRecords = async (patientId: string) => {
     try {
       setRecordsLoading(true);
+      console.log('🔄 Loading records for patient:', patientId);
       
-      // Get the doctor's profile ID first
-      const { data: doctorProfile, error: profileError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('user_id', user?.id)
-        .single();
+      // Run all queries in parallel for better performance
+      const [doctorProfileResult, patientProfileResult] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id')
+          .eq('user_id', user?.id)
+          .single(),
+        supabase
+          .from('profiles')
+          .select('id, user_id, full_name, email')
+          .eq('id', patientId)
+          .maybeSingle()
+      ]);
+
+      const { data: doctorProfile, error: profileError } = doctorProfileResult;
+      const { data: patientProfile, error: patientError } = patientProfileResult;
 
       if (profileError || !doctorProfile) {
         console.error('Doctor profile error:', profileError);
         setPatientRecords([]);
         return;
       }
-      
-      // Get patient profile to map user_id
-      const { data: patientProfile, error: patientError } = await supabase
-        .from('profiles')
-        .select('id, user_id, full_name, email')
-        .eq('id', patientId)
-        .maybeSingle();
 
       if (patientError) {
         console.error('Patient profile error:', patientError);
@@ -256,22 +291,48 @@ const DoctorPatients = memo(() => {
         return;
       }
 
-      console.log('Loading records for patient:', patientProfile.full_name, 'user_id:', patientProfile.user_id);
+      console.log('✅ Patient profile found:', patientProfile.full_name, 'user_id:', patientProfile.user_id);
+
+      // Run all record queries in parallel
+      const [healthRecordsResult, prescriptionsResult, consultationNotesResult] = await Promise.all([
+        supabase
+          .from('health_records')
+          .select('*')
+          .eq('user_id', patientProfile.user_id),
+        supabase
+          .from('prescriptions')
+          .select(`
+            *,
+            profiles!prescriptions_doctor_id_fkey (
+              full_name
+            )
+          `)
+          .eq('patient_id', patientId),
+        supabase
+          .from('consultation_notes')
+          .select(`
+            *,
+            profiles!consultation_notes_doctor_id_fkey (
+              full_name
+            )
+          `)
+          .eq('patient_id', patientId)
+      ]);
+
+      const { data: healthRecords, error: healthError } = healthRecordsResult;
+      const { data: prescriptions, error: prescriptionError } = prescriptionsResult;
+      const { data: consultationNotes, error: consultationError } = consultationNotesResult;
+
+      // Log any errors but continue processing
+      if (healthError) console.error('Health records error:', healthError);
+      if (prescriptionError) console.error('Prescriptions error:', prescriptionError);
+      if (consultationError) console.error('Consultation notes error:', consultationError);
+
+      console.log('📊 Records found - Health:', healthRecords?.length || 0, 'Prescriptions:', prescriptions?.length || 0, 'Consultation Notes:', consultationNotes?.length || 0);
 
       const allRecords: PatientRecord[] = [];
 
-      // Health records
-      const { data: healthRecords, error: healthError } = await supabase
-        .from('health_records')
-        .select('*')
-        .eq('user_id', patientProfile.user_id);
-
-      if (healthError) {
-        console.error('Health records error:', healthError);
-      } else {
-        console.log('Found health records:', healthRecords?.length || 0);
-      }
-
+      // Process health records
       healthRecords?.forEach(record => {
         allRecords.push({
           id: record.id,
@@ -290,23 +351,7 @@ const DoctorPatients = memo(() => {
         });
       });
 
-      // Prescriptions
-      const { data: prescriptions, error: prescriptionError } = await supabase
-        .from('prescriptions')
-        .select(`
-          *,
-          profiles!prescriptions_doctor_id_fkey (
-            full_name
-          )
-        `)
-        .eq('patient_id', patientId);
-
-      if (prescriptionError) {
-        console.error('Prescriptions error:', prescriptionError);
-      } else {
-        console.log('Found prescriptions:', prescriptions?.length || 0);
-      }
-
+      // Process prescriptions
       prescriptions?.forEach(prescription => {
         allRecords.push({
           id: prescription.id,
@@ -329,23 +374,7 @@ const DoctorPatients = memo(() => {
         });
       });
 
-      // Consultation notes
-      const { data: consultationNotes, error: consultationError } = await supabase
-        .from('consultation_notes')
-        .select(`
-          *,
-          profiles!consultation_notes_doctor_id_fkey (
-            full_name
-          )
-        `)
-        .eq('patient_id', patientId);
-
-      if (consultationError) {
-        console.error('Consultation notes error:', consultationError);
-      } else {
-        console.log('Found consultation notes:', consultationNotes?.length || 0);
-      }
-
+      // Process consultation notes
       consultationNotes?.forEach(note => {
         allRecords.push({
           id: note.id,
@@ -367,10 +396,10 @@ const DoctorPatients = memo(() => {
 
       // Sort by creation date
       const sortedRecords = allRecords.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-      console.log('Total records found:', sortedRecords.length);
+      console.log('✅ Total records loaded:', sortedRecords.length);
       setPatientRecords(sortedRecords);
     } catch (error) {
-      console.error('Error loading patient records:', error);
+      console.error('❌ Error loading patient records:', error);
       toast({
         title: "Error",
         description: "Failed to load patient records",
@@ -466,6 +495,18 @@ const DoctorPatients = memo(() => {
     setSearchTerm(patient.name);
     setShowDropdown(false);
   }, []);
+
+  const openAIModal = (record: PatientRecord) => {
+    setSelectedRecordForAI({
+      id: record.id,
+      title: record.title,
+      type: record.recordType,
+      description: record.description,
+      fileUrl: record.fileUrl,
+      fileName: record.fileName
+    });
+    setIsAIModalOpen(true);
+  };
 
   const getRecordIcon = (type: string) => {
     switch (type) {
@@ -1489,6 +1530,14 @@ const DoctorPatients = memo(() => {
                                       <Eye className="h-4 w-4 mr-2" />
                                       View Details
                                     </Button>
+                                    <Button 
+                                      variant="outline" 
+                                      size="sm"
+                                      onClick={() => openAIModal(record)}
+                                    >
+                                      <Brain className="h-4 w-4 mr-2" />
+                                      AI Analytics
+                                    </Button>
                                     {record.fileUrl && (
                                       <Button 
                                         variant="outline" 
@@ -1514,7 +1563,7 @@ const DoctorPatients = memo(() => {
                                     {record.doctorName && (
                                       <div className="flex items-center space-x-1">
                                         <Stethoscope className="h-4 w-4" />
-                                        <span>Dr. {record.doctorName}</span>
+                                        <span>{record.doctorName}</span>
                                       </div>
                                     )}
                                   </div>
@@ -1538,6 +1587,22 @@ const DoctorPatients = memo(() => {
         )}
       </div>
 
+      {/* AI Analysis Modal */}
+      {selectedRecordForAI && (
+        <AIAnalysisModal
+          isOpen={isAIModalOpen}
+          onClose={() => {
+            setIsAIModalOpen(false);
+            setSelectedRecordForAI(null);
+          }}
+          recordId={selectedRecordForAI.id}
+          recordTitle={selectedRecordForAI.title}
+          recordType={selectedRecordForAI.type}
+          recordDescription={selectedRecordForAI.description}
+          fileUrl={selectedRecordForAI.fileUrl}
+          fileName={selectedRecordForAI.fileName}
+        />
+      )}
     </div>
   );
 });

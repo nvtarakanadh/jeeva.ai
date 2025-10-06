@@ -19,42 +19,34 @@ export interface AIInsightSummary {
 
 export const getAIInsights = async (userId: string): Promise<AIInsight[]> => {
   try {
-    // First get the user's health records
-    const { data: records, error: recordsError } = await supabase
-      .from('health_records')
-      .select('id')
-      .eq('user_id', userId);
-
-    if (recordsError) {
-      console.error('Error fetching health records for AI insights:', recordsError);
-      throw recordsError;
-    }
-
-    if (!records || records.length === 0) {
-      return [];
-    }
-
-    const recordIds = records.map(record => record.id);
-
+    console.log('🔄 Fetching AI insights for user:', userId);
+    
+    // Use a single query with join instead of two separate queries
     const { data, error } = await supabase
       .from('ai_insights')
-      .select('*')
-      .in('record_id', recordIds)
+      .select(`
+        *,
+        health_records!inner(user_id)
+      `)
+      .eq('health_records.user_id', userId)
       .order('created_at', { ascending: false });
 
     if (error) {
       console.error('Error fetching AI insights:', error);
       // If table doesn't exist, return empty array instead of throwing
-      if (error.message.includes('does not exist')) {
+      if (error.message.includes('does not exist') || error.message.includes('relation') || error.code === 'PGRST116') {
+        console.log('AI insights table not found, returning empty array');
         return [];
       }
       throw error;
     }
 
+    console.log('✅ AI insights fetched:', data?.length || 0);
     return data || [];
   } catch (error) {
     console.error('Error in getAIInsights:', error);
-    throw error;
+    // Return empty array instead of throwing to prevent dashboard crashes
+    return [];
   }
 };
 
@@ -83,7 +75,7 @@ export const getAIInsightSummary = async (userId: string): Promise<AIInsightSumm
   }
 };
 
-export const createAIInsight = async (insightData: Omit<AIInsight, 'id' | 'created_at' | 'updated_at'>): Promise<AIInsight> => {
+export const createAIInsight = async (insightData: Omit<AIInsight, 'id' | 'created_at' | 'updated_at'> & { user_id: string }): Promise<AIInsight> => {
   try {
     const { data, error } = await supabase
       .from('ai_insights')

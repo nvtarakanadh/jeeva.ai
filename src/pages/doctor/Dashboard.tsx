@@ -81,19 +81,6 @@ const DoctorDashboard = () => {
     getDoctorProfileId();
   }, [user]);
 
-  // Expose a global function so Quick Actions can open the schedule modal directly
-  useEffect(() => {
-    (window as any).openDoctorScheduleModal = () => {
-      const now = new Date();
-      setSelectedDate(now);
-      setEditingEvent(null);
-      setIsScheduleModalOpen(true);
-    };
-    return () => {
-      delete (window as any).openDoctorScheduleModal;
-    };
-  }, []);
-
   // Load events for calendar with memoization
   const loadEvents = useCallback(async () => {
     if (!doctorProfileId) return;
@@ -459,6 +446,13 @@ const DoctorDashboard = () => {
     }
     
     try {
+      // Map UI status to DB status accurately
+      const toDbStatus = (uiStatus: DoctorScheduleData['status']): 'scheduled' | 'confirmed' | 'cancelled' => {
+        if (uiStatus === 'confirmed') return 'confirmed';
+        if (uiStatus === 'cancelled') return 'cancelled';
+        return 'scheduled'; // pending -> scheduled in DB
+      };
+
       if (editingEvent?.type === 'consultation') {
         console.log('Updating consultation in database...');
         console.log('Update parameters:', {
@@ -467,7 +461,7 @@ const DoctorDashboard = () => {
           consultationTime: scheduleData.time,
           reason: scheduleData.title,
           notes: scheduleData.notes,
-          status: scheduleData.status === 'confirmed' ? 'confirmed' : 'scheduled'
+          status: toDbStatus(scheduleData.status)
         });
         
         try {
@@ -477,7 +471,7 @@ const DoctorDashboard = () => {
             consultationTime: scheduleData.time,
             reason: scheduleData.title,
             notes: scheduleData.notes,
-            status: scheduleData.status === 'confirmed' ? 'confirmed' : 'scheduled'
+            status: toDbStatus(scheduleData.status)
           });
           
           console.log('Database update result:', updatedEvent);
@@ -725,6 +719,19 @@ const DoctorDashboard = () => {
     onViewChange: setCalendarView
   }), []);
 
+  // Provide a global function for QuickActions to open the schedule modal
+  useEffect(() => {
+    (window as any).openDoctorScheduleModal = () => {
+      const now = new Date();
+      setSelectedDate(now);
+      setEditingEvent(null);
+      setIsScheduleModalOpen(true);
+    };
+    return () => {
+      delete (window as any).openDoctorScheduleModal;
+    };
+  }, []);
+
   const getPriorityColor = (priority: 'high' | 'medium' | 'low') => {
     const colors = {
       high: 'bg-destructive',
@@ -834,11 +841,11 @@ const DoctorDashboard = () => {
 
       {/* Enhanced Calendar Section */}
       <div data-calendar-section>
-      <Suspense fallback={<div className="animate-pulse bg-gray-200 h-96 rounded-lg"></div>}>
-        {loading || isDataLoading ? (
-          <CalendarSkeleton />
-        ) : (
-          <EnhancedCalendarComponent
+        <Suspense fallback={<div className="animate-pulse bg-gray-200 h-96 rounded-lg"></div>}>
+          {loading || isDataLoading ? (
+            <CalendarSkeleton />
+          ) : (
+            <EnhancedCalendarComponent
             key={calendarKey}
             events={events.map(event => {
               console.log('Mapping event for calendar:', event);
@@ -868,7 +875,7 @@ const DoctorDashboard = () => {
             showAddButton={true}
           />
         )}
-      </Suspense>
+        </Suspense>
       </div>
 
       {/* Recent Activity */}

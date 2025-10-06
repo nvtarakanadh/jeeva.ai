@@ -117,7 +117,7 @@ export const NotificationDropdown: React.FC = () => {
           targetPath = userRole === 'doctor' ? '/doctor/consultations' : '/consultations';
           break;
         case 'ai_analysis_complete':
-          targetPath = '/ai-insights';
+          targetPath = '/records';
           break;
         case 'health_alert':
         case 'system':

@@ -60,6 +60,7 @@ export interface AIAnalysis {
   recommendations: string[];
   confidence: number; // 0-1
   processedAt: Date;
+  recordTitle: string;
 }
 
 export type ConsentStatus = 'pending' | 'approved' | 'denied' | 'revoked' | 'expired';

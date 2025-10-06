@@ -24,6 +24,7 @@ interface QuickAction {
   onClick?: () => void;
   color: string;
   bgColor: string;
+  gradient: string;
 }
 
 const QuickActions = () => {
@@ -37,25 +38,31 @@ const QuickActions = () => {
       icon: UserCheck,
       href: '/doctor/consents',
       color: 'text-green-600',
-      bgColor: 'bg-green-50 hover:bg-green-100'
+      bgColor: 'bg-green-50 hover:bg-green-100',
+      gradient: 'from-green-50 to-green-100'
     },
     {
       id: 'schedule',
       title: 'Schedule',
       icon: Calendar,
       onClick: () => {
-        // Prefer opening via global function exposed by the dashboard
+        // Open schedule modal directly if available
         const opener = (window as any).openDoctorScheduleModal;
         if (typeof opener === 'function') {
           opener();
           return;
         }
-        // Fallback: scroll to calendar area
-        const el = document.querySelector('[data-calendar-section]');
-        if (el) (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // Fallback: scroll to calendar section
+        const calendarSection = document.querySelector('[data-calendar-section]') ||
+                               document.querySelector('.calendar-container') ||
+                               document.querySelector('[class*="calendar"]');
+        if (calendarSection) {
+          calendarSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
       },
       color: 'text-purple-600',
-      bgColor: 'bg-purple-50 hover:bg-purple-100'
+      bgColor: 'bg-purple-50 hover:bg-purple-100',
+      gradient: 'from-purple-50 to-purple-100'
     },
     {
       id: 'upload-prescription',
@@ -63,7 +70,8 @@ const QuickActions = () => {
       icon: Pill,
       href: '/doctor/prescriptions',
       color: 'text-orange-600',
-      bgColor: 'bg-orange-50 hover:bg-orange-100'
+      bgColor: 'bg-orange-50 hover:bg-orange-100',
+      gradient: 'from-orange-50 to-orange-100'
     },
     {
       id: 'patients',
@@ -71,7 +79,8 @@ const QuickActions = () => {
       icon: Users,
       href: '/doctor/patients',
       color: 'text-cyan-600',
-      bgColor: 'bg-cyan-50 hover:bg-cyan-100'
+      bgColor: 'bg-cyan-50 hover:bg-cyan-100',
+      gradient: 'from-cyan-50 to-cyan-100'
     }
   ];
 
@@ -82,7 +91,8 @@ const QuickActions = () => {
       icon: Upload,
       href: '/patient/health-records',
       color: 'text-blue-600',
-      bgColor: 'bg-blue-50 hover:bg-blue-100'
+      bgColor: 'bg-blue-50 hover:bg-blue-100',
+      gradient: 'from-blue-50 to-blue-100'
     },
     {
       id: 'consent-management',
@@ -90,7 +100,8 @@ const QuickActions = () => {
       icon: Shield,
       href: '/patient/consent-management',
       color: 'text-green-600',
-      bgColor: 'bg-green-50 hover:bg-green-100'
+      bgColor: 'bg-green-50 hover:bg-green-100',
+      gradient: 'from-green-50 to-green-100'
     },
     {
       id: 'schedule',
@@ -104,7 +115,8 @@ const QuickActions = () => {
         }
       },
       color: 'text-purple-600',
-      bgColor: 'bg-purple-50 hover:bg-purple-100'
+      bgColor: 'bg-purple-50 hover:bg-purple-100',
+      gradient: 'from-purple-50 to-purple-100'
     },
     {
       id: 'prescriptions',
@@ -112,15 +124,8 @@ const QuickActions = () => {
       icon: Pill,
       href: '/patient/prescriptions',
       color: 'text-orange-600',
-      bgColor: 'bg-orange-50 hover:bg-orange-100'
-    },
-    {
-      id: 'ai-insights',
-      title: 'AI Insights',
-      icon: BarChart3,
-      href: '/patient/ai-insights',
-      color: 'text-indigo-600',
-      bgColor: 'bg-indigo-50 hover:bg-indigo-100'
+      bgColor: 'bg-orange-50 hover:bg-orange-100',
+      gradient: 'from-orange-50 to-orange-100'
     },
     {
       id: 'consultations',
@@ -128,7 +133,8 @@ const QuickActions = () => {
       icon: Stethoscope,
       href: '/patient/consultations',
       color: 'text-cyan-600',
-      bgColor: 'bg-cyan-50 hover:bg-cyan-100'
+      bgColor: 'bg-cyan-50 hover:bg-cyan-100',
+      gradient: 'from-cyan-50 to-cyan-100'
     }
   ];
 
@@ -143,25 +149,24 @@ const QuickActions = () => {
   };
 
   return (
-    <div className="w-full bg-white border-b border-gray-200 py-4">
+    <div className="w-full bg-white border-b border-gray-200 py-2">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-6 justify-items-center">
+        <h2 className="text-sm font-semibold tracking-wide text-gray-500 mb-2 text-left">Quick Actions</h2>
+        <div className="flex md:flex-wrap flex-nowrap gap-4 overflow-x-auto scroll-smooth scrollbar-hide mb-4">
           {actions.map((action) => (
-            <Card 
+            <button
               key={action.id}
-              className="w-[150px] h-[120px] cursor-pointer transition-shadow duration-200 hover:shadow-lg"
+              className="w-[76px] h-[76px] max-w-[80px] max-h-[80px] flex-shrink-0 rounded-xl border border-gray-200 bg-white shadow-sm hover:shadow-md hover:border-gray-300 transform hover:scale-105 transition-transform duration-200 flex flex-col items-center justify-center"
               onClick={() => handleActionClick(action)}
+              type="button"
             >
-              <CardContent className="p-4 h-full flex flex-col items-center justify-center">
-                <div className={`w-12 h-12 rounded-xl ${action.bgColor} flex items-center justify-center mb-3 transition-colors duration-200`}>
-                  <action.icon className={`h-6 w-6 ${action.color}`} />
-                </div>
-                <span className="text-sm font-medium text-gray-700 text-center leading-tight">
-                  {action.title}
-                </span>
-              </CardContent>
-            </Card>
+              <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${action.gradient} flex items-center justify-center mb-1`}>
+                <action.icon className={`h-5 w-5 ${action.color}`} />
+              </div>
+              <span className="text-[11px] font-medium text-gray-700 text-center leading-snug break-words px-1">
+                {action.title}
+              </span>
+            </button>
           ))}
         </div>
       </div>

@@ -423,6 +423,32 @@ const DayViewModal: React.FC<DayViewModalProps> = ({
           )}
         </div>
 
+        {/* Legend */}
+        <div className="p-4 border-t bg-gray-50">
+          <div className="flex flex-wrap gap-4 text-sm">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded bg-green-500"></div>
+              <span>Consultations</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded bg-red-500"></div>
+              <span>Blocked Time</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded bg-blue-500"></div>
+              <span>Follow-ups</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded bg-purple-500"></div>
+              <span>Meetings</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded bg-indigo-500"></div>
+              <span>Reminders</span>
+            </div>
+          </div>
+        </div>
+
       </DialogContent>
     </Dialog>
   );

@@ -13,7 +13,6 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import PatientDashboard from "./pages/patient/Dashboard";
 import HealthRecords from "./pages/patient/HealthRecords";
-import AIInsights from "./pages/patient/AIInsights";
 import ConsentManagement from "./pages/patient/ConsentManagement";
 import ShareData from "./pages/patient/ShareData";
 import Profile from "./pages/patient/Profile";
@@ -69,11 +68,6 @@ const App = () => {
                 <Route path="/records" element={
                   <ProtectedRoute allowedRoles={['patient']}>
                     <MainLayout><HealthRecords /></MainLayout>
-                  </ProtectedRoute>
-                } />
-                <Route path="/ai-insights" element={
-                  <ProtectedRoute allowedRoles={['patient']}>
-                    <MainLayout><AIInsights /></MainLayout>
                   </ProtectedRoute>
                 } />
                 <Route path="/consents" element={

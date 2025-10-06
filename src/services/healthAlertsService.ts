@@ -82,14 +82,28 @@ export const getHealthAlerts = async (userId: string): Promise<HealthAlert[]> =>
     }
 
     // Check for AI insights that might indicate health concerns
-    const { data: insights, error: insightsError } = await supabase
-      .from('ai_insights')
-      .select('insight_type, content, confidence_score, created_at')
-      .eq('health_records.user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(10);
+    // First get the user's health records for AI insights
+    const { data: aiRecords, error: aiRecordsError } = await supabase
+      .from('health_records')
+      .select('id')
+      .eq('user_id', userId);
 
-    if (!insightsError && insights) {
+    let insights = [];
+    if (!aiRecordsError && aiRecords && aiRecords.length > 0) {
+      const recordIds = aiRecords.map(record => record.id);
+      const { data: insightsData, error: insightsError } = await supabase
+        .from('ai_insights')
+        .select('insight_type, content, confidence_score, created_at')
+        .in('record_id', recordIds)
+        .order('created_at', { ascending: false })
+        .limit(10);
+      
+      if (!insightsError) {
+        insights = insightsData || [];
+      }
+    }
+
+    if (insights && insights.length > 0) {
       const concerningInsights = insights.filter(insight => 
         insight.confidence_score > 0.7 && 
         (insight.content.toLowerCase().includes('abnormal') || 

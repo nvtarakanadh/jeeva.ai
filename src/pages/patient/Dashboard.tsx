@@ -534,7 +534,9 @@ const PatientDashboard = () => {
       
       try {
         setLoading(true);
+        console.log('🔄 Loading dashboard data for user:', user.id);
         
+        // Phase 1: Load critical data first (fast)
         const profileCacheKey = createCacheKey('patient-profile', user.id);
         let profile = cacheService.get(profileCacheKey);
         
@@ -551,40 +553,45 @@ const PatientDashboard = () => {
           cacheService.set(profileCacheKey, profile, CACHE_TTL.LONG);
         }
 
+        // Load critical data in parallel
+        const [healthRecordsData, appointmentsData] = await Promise.all([
+          getCachedHealthRecords(user.id),
+          getCachedAppointments(user.id)
+        ]);
+
+        // Set critical data immediately
+        setHealthRecords(healthRecordsData as any);
+        setAppointments(appointmentsData as any);
+        console.log('✅ Critical data loaded');
+
+        // Phase 2: Load secondary data (can be slower)
         const [
-          healthRecordsData,
           aiInsightsData,
           consentRequestsData,
           activityData,
           alertsData,
-          appointmentsData,
           doctorsData,
           testCentersData
         ] = await Promise.all([
-          getCachedHealthRecords(user.id),
           getCachedAIInsights(user.id),
           getCachedConsentRequests((profile as any).id),
           getCachedRecentActivity(user.id),
           getCachedHealthAlerts(user.id),
-          getCachedAppointments(user.id),
           getCachedDoctors(),
           getCachedTestCenters()
         ]);
 
-        setHealthRecords(healthRecordsData as any);
+        // Set secondary data
         setAiInsights(aiInsightsData as any);
         setActiveConsents((consentRequestsData as any[]).filter((consent: any) => consent.status === 'approved').length);
         setRecentActivity(activityData as any);
         setHealthAlerts(alertsData as any);
-        setAppointments(appointmentsData as any);
-        console.log('🔍 Setting doctors in state:', doctorsData);
-        console.log('🔍 Doctors length:', Array.isArray(doctorsData) ? doctorsData.length : 0);
-        
-        // Set doctors data
         setDoctors(doctorsData as any);
         setTestCenters(testCentersData as any);
+        
+        console.log('✅ All dashboard data loaded');
       } catch (error) {
-        console.error('Error loading dashboard data:', error);
+        console.error('❌ Error loading dashboard data:', error);
       } finally {
         setLoading(false);
       }
@@ -1226,6 +1233,25 @@ const PatientDashboard = () => {
         </Card>
       )}
 
+      {/* Calendar Section */}
+      <PatientCalendarComponent
+        appointments={appointments}
+        onDateClick={handleDateClick}
+        onAppointmentClick={handleAppointmentClick}
+        onAddAppointment={handleAddAppointment}
+        onEditAppointment={handleAppointmentClick}
+        onCancelAppointment={handleCancelAppointment}
+        onRescheduleAppointment={(appointmentId: string) => {
+          const appointment = appointments.find(apt => apt.id === appointmentId);
+          if (appointment) {
+            handleAppointmentClick(appointment);
+          }
+        }}
+        onDayViewClick={handleDayViewClick}
+        showNavigation={true}
+        showAddButton={true}
+      />
+
       {/* Recent Activity */}
       <Card>
         <CardHeader>
@@ -1262,25 +1288,6 @@ const PatientDashboard = () => {
           )}
         </CardContent>
       </Card>
-
-      {/* Calendar Section */}
-      <PatientCalendarComponent
-        appointments={appointments}
-        onDateClick={handleDateClick}
-        onAppointmentClick={handleAppointmentClick}
-        onAddAppointment={handleAddAppointment}
-        onEditAppointment={handleAppointmentClick}
-        onCancelAppointment={handleCancelAppointment}
-        onRescheduleAppointment={(appointmentId: string) => {
-          const appointment = appointments.find(apt => apt.id === appointmentId);
-          if (appointment) {
-            handleAppointmentClick(appointment);
-          }
-        }}
-        onDayViewClick={handleDayViewClick}
-        showNavigation={true}
-        showAddButton={true}
-      />
 
       {/* Scheduling Modal */}
       <PatientSchedulingModal

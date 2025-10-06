@@ -190,19 +190,6 @@ const EnhancedCalendarComponent: React.FC<EnhancedCalendarComponentProps> = memo
                     <Calendar className="h-3 w-3" />
                   </Button>
                 )}
-                {showAddButton && isCurrentMonth && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-6 w-6 p-0"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onAddEvent(cellDate);
-                    }}
-                  >
-                    +
-                  </Button>
-                )}
               </div>
             </div>
             <div className="space-y-1">
@@ -373,12 +360,13 @@ const EnhancedCalendarComponent: React.FC<EnhancedCalendarComponentProps> = memo
 
   return (
     <Card className="w-full">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-        <CardTitle className="flex items-center gap-2">
-          <CalendarIcon className="h-5 w-5" />
-          Calendar
-        </CardTitle>
-        <div className="flex items-center gap-2">
+      <CardHeader className="pb-4">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <Calendar className="h-5 w-5" />
+            My Schedule
+          </CardTitle>
+          <div className="flex items-center gap-2">
           {showNavigation && (
             <div className="flex items-center gap-2">
               <Button
@@ -418,21 +406,55 @@ const EnhancedCalendarComponent: React.FC<EnhancedCalendarComponentProps> = memo
               </Button>
             </div>
           )}
+          </div>
         </div>
       </CardHeader>
-      <CardContent>
-        {view === 'month' ? (
-          <div className="space-y-0">
-            <div className="grid grid-cols-7 gap-0 text-center text-sm font-medium text-gray-500 mb-2">
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                <div key={day} className="p-2">{day}</div>
-              ))}
+      
+      <CardContent className="p-0">
+        <div className="border-t">
+          {view === 'month' ? (
+            <div className="space-y-0">
+              <div className="grid grid-cols-7 bg-gray-50 border-b">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                  <div key={day} className="p-3 text-center text-sm font-medium text-gray-700">
+                    {day}
+                  </div>
+                ))}
             </div>
-            {renderMonthView}
+              <div className="min-h-[400px]">
+                {renderMonthView}
+              </div>
+            </div>
+          ) : (
+            renderWeekView
+          )}
+        </div>
+        
+        {/* Legend */}
+        <div className="p-4 border-t bg-gray-50">
+          <div className="flex flex-wrap gap-4 text-sm">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded bg-green-500"></div>
+              <span>Consultations</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded bg-red-500"></div>
+              <span>Blocked Time</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded bg-blue-500"></div>
+              <span>Follow-ups</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded bg-purple-500"></div>
+              <span>Meetings</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded bg-indigo-500"></div>
+              <span>Reminders</span>
+            </div>
           </div>
-        ) : (
-          renderWeekView
-        )}
+        </div>
       </CardContent>
     </Card>
   );
